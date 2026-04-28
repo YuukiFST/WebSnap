@@ -131,6 +131,9 @@ class BrowserManager:
 
 _browser_manager = BrowserManager()
 
+_warmup_thread = threading.Thread(target=_browser_manager.start, daemon=True)
+_warmup_thread.start()
+
 
 def _apply_basic_stealth_global(context):
     context.add_init_script("""

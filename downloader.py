@@ -153,7 +153,7 @@ class WebsiteDownloader:
                 }
 
     def _get_resource(self, url, base=None):
-        """Get a resource - from cache, network capture, or fallback download"""
+        """Get a resource - from cache, network capture, or batch download"""
         if not url or url.startswith('data:') or url.startswith('blob:') or url.startswith('#'):
             return url
         
@@ -169,12 +169,19 @@ class WebsiteDownloader:
             res = self.network_resources[abs_url]
             return self._save_resource(abs_url, res['body'], res.get('content_type', ''))
         
-        # Fallback download
-        local_path = self._download_fallback(abs_url)
-        if local_path:
-            return local_path
+        # Defer to batch resolution
+        self._pending_urls.add(abs_url)
+        if len(self._pending_urls) >= 20:
+            self._resolve_pending()
         
-        # Return original if all fails
+        # Retry after batch resolution
+        if abs_url in self.resource_cache:
+            return self.resource_cache[abs_url]
+        if abs_url in self.network_resources:
+            res = self.network_resources[abs_url]
+            return self._save_resource(abs_url, res['body'], res.get('content_type', ''))
+        
+        # Return original if still not resolved (will be resolved in final batch)
         return url
 
     def _rewrite_css_urls(self, css_content, css_url):
@@ -842,7 +849,6 @@ class WebsiteDownloader:
             html_content = page.content()
         
         self.log(f"📦 Capturados {len(self.network_resources)} recursos de rede")
-        self._resolve_pending()
 
         # Process HTML
         self.log("🔧 Processando HTML e assets...")
@@ -1079,6 +1085,8 @@ class WebsiteDownloader:
             
             self.log(f"   ✅ Removidos {scripts_removed} scripts e {links_removed} preloads do framework")
         
+        self._resolve_pending()
+
         # Save HTML
         html_output = str(soup)
         with open(os.path.join(self.output_dir, 'index.html'), 'w', encoding='utf-8') as f:
