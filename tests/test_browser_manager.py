@@ -1,4 +1,3 @@
-import threading
 from app import BrowserManager
 
 
@@ -8,22 +7,28 @@ def test_browser_manager_singleton():
     assert bm1 is bm2
 
 
-def test_browser_manager_start_and_healthy():
+def test_browser_manager_launch_and_cleanup():
     bm = BrowserManager()
-    bm.start()
-    assert bm.healthy is True
-    assert bm._browser is not None
-
-
-def test_browser_manager_get_and_release_context():
-    bm = BrowserManager()
-    bm.start()
-    ctx = bm.get_context()
-    assert ctx is not None
-    page = ctx.new_page()
+    pw, browser, context, page = bm.launch()
+    assert pw is not None
+    assert browser is not None
+    assert context is not None
+    assert page is not None
     page.goto('data:text/html,<h1>test</h1>')
     content = page.content()
     assert '<h1>test</h1>' in content
-    page.close()
-    bm.release_context(ctx)
-    assert True
+    bm.cleanup(pw, browser, context, page)
+
+
+def test_browser_manager_multiple_launches():
+    """Each launch creates a fresh browser in the same thread."""
+    bm = BrowserManager()
+    pw1, br1, ctx1, page1 = bm.launch()
+    page1.goto('data:text/html,<p>first</p>')
+    assert '<p>first</p>' in page1.content()
+    bm.cleanup(pw1, br1, ctx1, page1)
+
+    pw2, br2, ctx2, page2 = bm.launch()
+    page2.goto('data:text/html,<p>second</p>')
+    assert '<p>second</p>' in page2.content()
+    bm.cleanup(pw2, br2, ctx2, page2)

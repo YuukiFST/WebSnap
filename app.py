@@ -9,6 +9,10 @@ import queue
 import threading
 import time
 import gc
+import json
+import threading
+
+from flask import Flask, render_template, request, send_file, Response, jsonify
 from playwright.sync_api import sync_playwright
 from downloader import WebsiteDownloader, zip_directory, zip_directory_to_memory, get_site_name
 
@@ -26,115 +30,6 @@ ORPHAN_FILE_TTL = 1800    # files on disk with no matching session
 CLEANUP_INTERVAL = 300    # how often the janitor runs
 
 
-class BrowserManager:
-    _instance = None
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
-        return cls._instance
-
-    def __init__(self):
-        if self._initialized:
-            return
-        self._initialized = True
-        self._playwright = None
-        self._browser = None
-        self._access_lock = threading.Lock()
-
-    @property
-    def healthy(self):
-        if self._browser is None:
-            return False
-        try:
-            return self._browser.is_connected()
-        except Exception:
-            return False
-
-    def start(self):
-        if self.healthy:
-            return
-        if self._playwright is not None:
-            try:
-                self._playwright.stop()
-            except Exception:
-                pass
-        self._playwright = sync_playwright().start()
-        self._browser = self._playwright.chromium.launch(
-            headless=True,
-            args=[
-                '--disable-dev-shm-usage',
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-gpu',
-                '--disable-extensions',
-                '--disable-background-networking',
-                '--disable-default-apps',
-                '--disable-sync',
-                '--disable-translate',
-                '--metrics-recording-only',
-                '--mute-audio',
-                '--no-first-run',
-                '--safebrowsing-disable-auto-update',
-            ],
-        )
-
-    def get_context(self):
-        return self._browser.new_context(
-            user_agent=(
-                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
-                'AppleWebKit/537.36 (KHTML, like Gecko) '
-                'Chrome/120.0.0.0 Safari/537.36'
-            ),
-            viewport={'width': 1920, 'height': 1080},
-            device_scale_factor=1,
-            locale='en-US',
-            timezone_id='America/New_York',
-        )
-
-    def release_context(self, context):
-        try:
-            context.close()
-        except Exception:
-            pass
-
-    def restart(self):
-        try:
-            if self._browser is not None:
-                self._browser.close()
-        except Exception:
-            pass
-        try:
-            if self._playwright is not None:
-                self._playwright.stop()
-        except Exception:
-            pass
-        self._playwright = None
-        self._browser = None
-        self.start()
-
-    def shutdown(self):
-        try:
-            if self._browser is not None:
-                self._browser.close()
-        except Exception:
-            pass
-        try:
-            if self._playwright is not None:
-                self._playwright.stop()
-        except Exception:
-            pass
-        self._playwright = None
-        self._browser = None
-
-
-_browser_manager = BrowserManager()
-
-_warmup_thread = threading.Thread(target=_browser_manager.start, daemon=True)
-_warmup_thread.start()
-
-
 def _apply_basic_stealth_global(context):
     context.add_init_script("""
         Object.defineProperty(navigator, 'webdriver', {
@@ -150,13 +45,71 @@ def _apply_basic_stealth_global(context):
     """)
 
 
-def _handle_shutdown(*args):
-    _browser_manager.shutdown()
+class BrowserManager:
+    """Factory that creates Playwright browser + page in the calling thread.
+
+    Playwright's sync API is thread-bound — the browser must be created and
+    used in the same thread.  Each download worker creates its own browser."""
+    _instance = None
+    _lock = threading.Lock()
+
+    _BROWSER_ARGS = [
+        '--disable-dev-shm-usage',
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-gpu',
+        '--disable-extensions',
+        '--disable-background-networking',
+        '--disable-default-apps',
+        '--disable-sync',
+        '--disable-translate',
+        '--metrics-recording-only',
+        '--mute-audio',
+        '--no-first-run',
+        '--safebrowsing-disable-auto-update',
+    ]
+
+    _UA = (
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
+        'AppleWebKit/537.36 (KHTML, like Gecko) '
+        'Chrome/120.0.0.0 Safari/537.36'
+    )
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def launch(self):
+        """Create a fresh Playwright + Chromium in the current thread."""
+        pw = sync_playwright().start()
+        browser = pw.chromium.launch(headless=True, args=self._BROWSER_ARGS)
+        context = browser.new_context(
+            user_agent=self._UA,
+            viewport={'width': 1920, 'height': 1080},
+            device_scale_factor=1,
+            locale='en-US',
+            timezone_id='America/New_York',
+        )
+        _apply_basic_stealth_global(context)
+        page = context.new_page()
+        return pw, browser, context, page
+
+    def cleanup(self, pw, browser, context, page):
+        for obj in (page, context, browser):
+            if obj is not None:
+                try:
+                    obj.close()
+                except Exception:
+                    pass
+        if pw is not None:
+            try:
+                pw.stop()
+            except Exception:
+                pass
 
 
-atexit.register(_browser_manager.shutdown)
-signal.signal(signal.SIGTERM, _handle_shutdown)
-signal.signal(signal.SIGINT, _handle_shutdown)
+_browser_manager = BrowserManager()
 
 
 def cleanup_downloads_folder():
@@ -348,17 +301,12 @@ def process_download(session_id, url):
         q.put(message)
 
     downloader = None
+    pw = None
+    browser = None
     context = None
     page = None
 
-    with _browser_manager._access_lock:
-        if not _browser_manager.healthy:
-            log_callback("🔄 Reiniciando navegador...")
-            _browser_manager.restart()
-
-        context = _browser_manager.get_context()
-        _apply_basic_stealth_global(context)
-        page = context.new_page()
+    pw, browser, context, page = _browser_manager.launch()
 
     try:
         downloader = WebsiteDownloader(url, download_dir, log_callback=log_callback, page=page)
@@ -409,13 +357,7 @@ def process_download(session_id, url):
             shutil.rmtree(download_dir, ignore_errors=True)
 
     finally:
-        if page is not None:
-            try:
-                page.close()
-            except Exception:
-                pass
-        if context is not None:
-            _browser_manager.release_context(context)
+        _browser_manager.cleanup(pw, browser, context, page)
         downloader = None
         gc.collect()
 

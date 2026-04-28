@@ -128,7 +128,14 @@ class WebsiteDownloader:
         if not url or url.startswith('data:') or url.startswith('blob:') or url.startswith('#'):
             return url
 
-        self._pending_urls.add(url)
+        if self._batch_client is None:
+            self._batch_client = AsyncResourceClient()
+
+        _, content = self._batch_client._download_one(url)
+        if content:
+            local_path = self._save_resource(url, content, '')
+            return local_path
+
         return None
 
     def _resolve_pending(self):
@@ -153,7 +160,7 @@ class WebsiteDownloader:
                 }
 
     def _get_resource(self, url, base=None):
-        """Get a resource - from cache, network capture, or batch download"""
+        """Get a resource - from cache, network capture, or fallback download"""
         if not url or url.startswith('data:') or url.startswith('blob:') or url.startswith('#'):
             return url
         
@@ -169,19 +176,12 @@ class WebsiteDownloader:
             res = self.network_resources[abs_url]
             return self._save_resource(abs_url, res['body'], res.get('content_type', ''))
         
-        # Defer to batch resolution
-        self._pending_urls.add(abs_url)
-        if len(self._pending_urls) >= 20:
-            self._resolve_pending()
+        # Fallback download via httpx (immediate, with connection pooling)
+        local_path = self._download_fallback(abs_url)
+        if local_path:
+            return local_path
         
-        # Retry after batch resolution
-        if abs_url in self.resource_cache:
-            return self.resource_cache[abs_url]
-        if abs_url in self.network_resources:
-            res = self.network_resources[abs_url]
-            return self._save_resource(abs_url, res['body'], res.get('content_type', ''))
-        
-        # Return original if still not resolved (will be resolved in final batch)
+        # Return original if all fails
         return url
 
     def _rewrite_css_urls(self, css_content, css_url):
@@ -1085,8 +1085,6 @@ class WebsiteDownloader:
             
             self.log(f"   ✅ Removidos {scripts_removed} scripts e {links_removed} preloads do framework")
         
-        self._resolve_pending()
-
         # Save HTML
         html_output = str(soup)
         with open(os.path.join(self.output_dir, 'index.html'), 'w', encoding='utf-8') as f:
