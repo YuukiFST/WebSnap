@@ -162,14 +162,7 @@ func (d *WebsiteDownloader) Process(allocCtx context.Context) error {
 	os.RemoveAll(d.outputDir)
 	os.MkdirAll(d.assetsDir, 0755)
 
-	ctx, ctxCancel := chromedp.NewContext(allocCtx)
-	defer ctxCancel()
-
-	if err := chromedp.Run(ctx, chromedp.EmulateViewport(1366, 768)); err != nil {
-		return fmt.Errorf("viewport: %w", err)
-	}
-
-	d.log("> Starting browser...")
+	ctx := allocCtx
 
 	d.setupNetworkCapture(ctx)
 	d.setupStealth(ctx)
