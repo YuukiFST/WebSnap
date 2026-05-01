@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebCopy</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        gray: {
+                            950: '#030712',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html, body {
+            scroll-behavior: smooth;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+        }
+
+        /* ========== GENESIS SPINNER ========== */
+        @keyframes genesis__spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .spinner-small {
+            width: 12px;
+            height: 12px;
+            border: 1.5px solid transparent;
+            border-top: 1.5px solid rgba(6, 182, 212, 0.6);
+            border-radius: 50%;
+            animation: genesis__spin 0.8s linear infinite;
+            display: inline-block;
+        }
+
+        /* ========== GRID OVERLAY ========== */
+        .grid-overlay {
+            background-image: linear-gradient(rgba(6, 182, 212, 0.1) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(6, 182, 212, 0.1) 1px, transparent 1px);
+            background-size: 50px 50px;
+        }
+
+        /* ========== CARD ANIMATION ========== */
+        @keyframes cardIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .download-card { animation: cardIn 0.3s ease; }
+
+        /* ========== CARD STATUS BADGES ========== */
+        .card-status {
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            border: 1px solid;
+        }
+        .card-status.queued {
+            background-color: rgba(245, 158, 11, 0.082);
+            border-color: rgba(245, 158, 11, 0.25);
+            color: rgb(245, 158, 11);
+        }
+        .card-status.processing {
+            background-color: rgba(6, 182, 212, 0.082);
+            border-color: rgba(6, 182, 212, 0.25);
+            color: rgb(6, 182, 212);
+        }
+        .card-status.complete {
+            background-color: rgba(16, 185, 129, 0.082);
+            border-color: rgba(16, 185, 129, 0.25);
+            color: rgb(16, 185, 129);
+        }
+        .card-status.error {
+            background-color: rgba(248, 113, 113, 0.082);
+            border-color: rgba(248, 113, 113, 0.25);
+            color: rgb(248, 113, 113);
+        }
+
+        /* ========== LOG AREA ========== */
+        .card-log {
+            border-top: 1px solid rgb(31, 41, 55);
+            padding: 0.5rem 1rem;
+            max-height: 160px;
+            overflow-y: auto;
+            font-size: 0.73rem;
+            color: rgb(107, 114, 128);
+            line-height: 1.7;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        }
+        .card-log .log-entry { padding: 1px 0; }
+        .card-log .log-entry:last-child { color: rgb(156, 163, 175); }
+
+        /* ========== SUCCESS SECTION ========== */
+        .card-success {
+            border-top: 1px solid rgb(31, 41, 55);
+            padding: 0.5rem 1rem;
+            font-size: 0.8rem;
+            color: rgb(52, 211, 153);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        }
+        .card-success a { color: rgb(34, 211, 238); text-decoration: underline; }
+        .card-success a:hover { color: rgb(103, 232, 249); }
+
+        /* ========== QUEUE POSITION ========== */
+        .card-queue-pos {
+            border-top: 1px solid rgb(31, 41, 55);
+            padding: 0.5rem 1rem;
+            font-size: 0.73rem;
+            color: rgb(107, 114, 128);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        }
+
+        /* ========== CARD HEADER ========== */
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.15s;
+            gap: 0.5rem;
+        }
+        .card-header:hover { background: rgba(6, 182, 212, 0.05); }
+
+        .card-url {
+            color: rgb(229, 231, 235);
+            font-size: 0.85rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 65%;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        }
+
+        /* ========== INPUT AREA ========== */
+        .input-prompt {
+            color: rgb(34, 211, 238);
+            font-size: 1rem;
+            flex-shrink: 0;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        }
+
+        /* ========== SCROLLBAR ========== */
+        .downloads-area::-webkit-scrollbar,
+        .card-log::-webkit-scrollbar { width: 4px; }
+        .downloads-area::-webkit-scrollbar-track,
+        .card-log::-webkit-scrollbar-track { background: transparent; }
+        .downloads-area::-webkit-scrollbar-thumb,
+        .card-log::-webkit-scrollbar-thumb { background: rgb(31, 41, 55); border-radius: 2px; }
+    </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-gray-950 via-black to-gray-950 m-0 leading-[inherit]">
+
+    <!-- Grid Overlay -->
+    <div class="fixed inset-0 opacity-20 pointer-events-none">
+        <div class="absolute inset-0 grid-overlay"></div>
+    </div>
+
+    <!-- Header -->
+    <header class="relative border-b border-gray-800 bg-black/50 backdrop-blur-xl">
+        <div class="max-w-2xl mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="relative">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-7 h-7 text-cyan-400" aria-hidden="true"><path d="M12 19h8"></path><path d="m4 17 6-6-6-6"></path></svg>
+                        <div class="absolute inset-0 blur-lg bg-cyan-400/30 -z-10"></div>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold text-white flex items-center gap-2">&gt; WebCopy_</h1>
+                        <p class="text-xs text-gray-500">~/downloads/queue</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-cyan-400" aria-hidden="true"><path d="m18 16 4-4-4-4"></path><path d="m6 8-4 4 4 4"></path><path d="m14.5 4-5 16"></path></svg>
+                    <span class="text-xs text-gray-400">v1.0</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main -->
+    <main class="relative max-w-2xl mx-auto px-6 py-8">
+        <div class="flex flex-col gap-6" style="min-height: calc(100vh - 200px);">
+
+            <!-- Empty State -->
+            <div id="emptyState" class="flex-1 flex items-center justify-center">
+                <div class="text-center space-y-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-10 h-10 text-gray-700 mx-auto" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" x2="12" y1="15" y2="3"></line></svg>
+                    <p class="text-gray-600 text-sm leading-relaxed">
+                        Paste a URL below and press Enter<br>
+                        to download a website replica
+                    </p>
+                </div>
+            </div>
+
+            <!-- Downloads Area -->
+            <div class="downloads-area flex flex-col gap-3 flex-1 overflow-y-auto" id="downloadsArea"></div>
+
+            <!-- Queue Info -->
+            <div class="queue-info text-center text-xs text-gray-600 py-2 min-h-[1.5rem]" id="queueInfo"></div>
+
+            <!-- Input Area -->
+            <div class="pt-4 border-t border-gray-800">
+                <div class="flex gap-3 items-center">
+                    <span class="input-prompt shrink-0">&gt;</span>
+                    <input type="url" id="urlInput" placeholder="paste URL here..."
+                        class="flex-1 pl-4 pr-3 py-2.5 bg-black/40 border border-gray-800 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 transition-colors text-sm"
+                        autofocus>
+                    <button onclick="addUrl()"
+                        class="shrink-0 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 relative overflow-hidden disabled:cursor-not-allowed bg-cyan-500/10 text-cyan-400 border border-cyan-500/50 hover:bg-cyan-500/20 hover:border-cyan-400">
+                        &gt; Submit
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="relative border-t border-gray-800 bg-black/50 backdrop-blur-xl mt-8">
+        <div class="max-w-2xl mx-auto px-6 py-3">
+            <div class="flex items-center justify-between text-xs text-gray-600">
+                <p>WebCopy · Download pixel-perfect replicas</p>
+                <div class="flex items-center gap-1.5">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3" aria-hidden="true"><path d="M12 19h8"></path><path d="m4 17 6-6-6-6"></path></svg>
+                    <span>JS Rendered</span>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        const queue = [];
+        let processing = null;
+        let cardCounter = 0;
+
+        function addUrl() {
+            const input = document.getElementById('urlInput');
+            const url = input.value.trim();
+            if (!url) return;
+
+            input.value = '';
+            input.focus();
+
+            const emptyState = document.getElementById('emptyState');
+            if (emptyState) emptyState.remove();
+
+            const id = 'card-' + (++cardCounter);
+            const isQueued = processing !== null;
+            const card = createCard(id, url, isQueued);
+
+            if (!processing) {
+                startProcessing({ id, url, card });
+            } else {
+                queue.push({ id, url, card });
+                updateQueuePositions();
+            }
+            updateQueueInfo();
+        }
+
+        function createCard(id, url, isQueued) {
+            const area = document.getElementById('downloadsArea');
+            const card = document.createElement('div');
+            card.className = 'download-card rounded-lg border border-gray-800 bg-gradient-to-br from-black/60 via-gray-900/40 to-black/60 backdrop-blur-sm overflow-hidden';
+            card.id = id;
+
+            const displayUrl = formatUrl(url);
+
+            if (isQueued) {
+                const pos = queue.length + 1;
+                card.innerHTML =
+                    '<div class="card-header" onclick="toggleLog(\'' + id + '\')">' +
+                        '<span class="card-url">' + escapeHtml(displayUrl) + '</span>' +
+                        '<span class="card-status queued">Queued</span>' +
+                    '</div>' +
+                    '<div class="card-queue-pos">Queue position: #' + pos + '</div>';
+            } else {
+                card.innerHTML =
+                    '<div class="card-header" onclick="toggleLog(\'' + id + '\')">' +
+                        '<span class="card-url">' + escapeHtml(displayUrl) + '</span>' +
+                        '<span class="card-status processing"><span class="spinner-small"></span>Starting</span>' +
+                    '</div>' +
+                    '<div class="card-log"></div>';
+            }
+
+            area.appendChild(card);
+            area.scrollTop = area.scrollHeight;
+            return card;
+        }
+
+        function startProcessing(entry) {
+            processing = entry;
+            const card = entry.card;
+
+            const status = card.querySelector('.card-status');
+            status.className = 'card-status processing';
+            status.innerHTML = '<span class="spinner-small"></span>Starting';
+
+            let logArea = card.querySelector('.card-log');
+            if (!logArea) {
+                const qp = card.querySelector('.card-queue-pos');
+                if (qp) qp.remove();
+                logArea = document.createElement('div');
+                logArea.className = 'card-log';
+                card.appendChild(logArea);
+            }
+
+            fetch('/start-download', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: entry.url })
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.error) { onError(entry, data.error); return; }
+                entry.sessionId = data.session_id;
+                connectSSE(entry);
+            })
+            .catch(function(err) {
+                onError(entry, 'Connection error: ' + err.message);
+            });
+        }
+
+        function connectSSE(entry) {
+            const es = new EventSource('/stream/' + entry.sessionId);
+            const logArea = entry.card.querySelector('.card-log');
+
+            es.onmessage = function(event) {
+                const line = document.createElement('div');
+                line.className = 'log-entry';
+                line.textContent = event.data;
+                logArea.appendChild(line);
+                logArea.scrollTop = logArea.scrollHeight;
+
+                const area = document.getElementById('downloadsArea');
+                area.scrollTop = area.scrollHeight;
+            };
+
+            es.addEventListener('done', function(event) {
+                es.close();
+                if (event.data === 'complete') {
+                    onComplete(entry);
+                } else {
+                    onError(entry, 'Download failed');
+                }
+            });
+
+            es.onerror = function() {
+                es.close();
+                onError(entry, 'Server connection lost');
+            };
+        }
+
+        function onComplete(entry) {
+            const status = entry.card.querySelector('.card-status');
+            status.className = 'card-status complete';
+            status.textContent = 'Done';
+
+            const a = document.createElement('a');
+            a.href = '/download-file/' + entry.sessionId;
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(function() { a.remove(); }, 100);
+
+            const div = document.createElement('div');
+            div.className = 'card-success';
+            div.innerHTML = '✓ ZIP downloaded · <a href="/download-file/' +
+                entry.sessionId + '">Download again</a>';
+            entry.card.appendChild(div);
+
+            const logArea = entry.card.querySelector('.card-log');
+            if (logArea) logArea.style.display = 'none';
+
+            finishAndProcessNext();
+        }
+
+        function onError(entry, message) {
+            const status = entry.card.querySelector('.card-status');
+            status.className = 'card-status error';
+            status.textContent = 'Error';
+
+            const logArea = entry.card.querySelector('.card-log');
+            if (logArea) {
+                const line = document.createElement('div');
+                line.className = 'log-entry';
+                line.style.color = '#f87171';
+                line.textContent = message;
+                logArea.appendChild(line);
+            }
+
+            finishAndProcessNext();
+        }
+
+        function finishAndProcessNext() {
+            processing = null;
+
+            if (queue.length > 0) {
+                const next = queue.shift();
+                updateQueuePositions();
+                startProcessing(next);
+            }
+
+            updateQueueInfo();
+        }
+
+        function updateQueuePositions() {
+            for (var i = 0; i < queue.length; i++) {
+                var posEl = queue[i].card.querySelector('.card-queue-pos');
+                if (posEl) posEl.textContent = 'Queue position: #' + (i + 1);
+            }
+        }
+
+        function updateQueueInfo() {
+            const info = document.getElementById('queueInfo');
+            if (processing && queue.length > 0) {
+                info.textContent = 'Processing 1 · ' + queue.length + ' in queue';
+            } else if (processing) {
+                info.textContent = 'Processing 1 download...';
+            } else {
+                info.textContent = '';
+            }
+        }
+
+        function toggleLog(cardId) {
+            const card = document.getElementById(cardId);
+            const log = card.querySelector('.card-log');
+            if (log) {
+                log.style.display = log.style.display === 'none' ? '' : 'none';
+            }
+        }
+
+        function formatUrl(url) {
+            try {
+                var u = new URL(url);
+                var d = u.hostname + (u.pathname !== '/' ? u.pathname : '');
+                return d.length > 45 ? d.substring(0, 42) + '...' : d;
+            } catch(e) { return url; }
+        }
+
+        function escapeHtml(text) {
+            var d = document.createElement('div');
+            d.textContent = text;
+            return d.innerHTML;
+        }
+
+        document.getElementById('urlInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') addUrl();
+        });
+    </script>
+</body>
+</html>
