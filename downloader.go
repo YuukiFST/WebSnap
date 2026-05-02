@@ -30,16 +30,17 @@ type networkResource struct {
 }
 
 type WebsiteDownloader struct {
-	url              string
-	outputDir        string
-	assetsDir        string
-	resourceCache    map[string]string
-	resourceCacheMu  sync.Mutex
-	networkResources map[string]*networkResource
-	baseURL          string
-	logCallback      func(string)
-	httpClient       *cookiedHTTPClient
-	pendingReqs      map[network.RequestID]*pendingRequest
+	url                string
+	outputDir          string
+	assetsDir          string
+	resourceCache      map[string]string
+	resourceCacheMu    sync.Mutex
+	networkResources   map[string]*networkResource
+	networkResourcesMu sync.RWMutex
+	baseURL            string
+	logCallback        func(string)
+	httpClient         *cookiedHTTPClient
+	pendingReqs        map[network.RequestID]*pendingRequest
 }
 
 type pendingRequest struct {
@@ -121,7 +122,9 @@ func (d *WebsiteDownloader) saveResource(assetURL string, content []byte, conten
 
 	relPath := "assets/" + filename
 	d.resourceCacheMu.Lock()
-	d.resourceCache[assetURL] = relPath
+	if _, exists := d.resourceCache[assetURL]; !exists {
+		d.resourceCache[assetURL] = relPath
+	}
 	d.resourceCacheMu.Unlock()
 	return relPath
 }
@@ -135,10 +138,12 @@ func (d *WebsiteDownloader) flushResources() {
 		body        []byte
 		contentType string
 	}
+	d.networkResourcesMu.RLock()
 	resources := make([]resource, 0, len(d.networkResources))
 	for u, r := range d.networkResources {
 		resources = append(resources, resource{u, r.body, r.contentType})
 	}
+	d.networkResourcesMu.RUnlock()
 
 	for _, r := range resources {
 		wg.Add(1)
@@ -166,7 +171,10 @@ func (d *WebsiteDownloader) getResource(assetURL, base string) string {
 		return cached
 	}
 
-	if res, ok := d.networkResources[absURL]; ok {
+	d.networkResourcesMu.RLock()
+	res, ok := d.networkResources[absURL]
+	d.networkResourcesMu.RUnlock()
+	if ok {
 		return d.saveResource(absURL, res.body, res.contentType)
 	}
 
@@ -241,7 +249,10 @@ func (d *WebsiteDownloader) Process(allocCtx context.Context) error {
 		}
 	}
 
-	d.log(fmt.Sprintf("> Captured %d network resources", len(d.networkResources)))
+	d.networkResourcesMu.RLock()
+	resourceCount := len(d.networkResources)
+	d.networkResourcesMu.RUnlock()
+	d.log(fmt.Sprintf("> Captured %d network resources", resourceCount))
 
 	d.fetchCSSTextFromBrowser(ctx, finalHTML)
 
@@ -255,7 +266,9 @@ func (d *WebsiteDownloader) Process(allocCtx context.Context) error {
 	assetsCount := len(d.resourceCache)
 	d.log(fmt.Sprintf("> Done! %d assets saved", assetsCount))
 
+	d.networkResourcesMu.Lock()
 	d.networkResources = nil
+	d.networkResourcesMu.Unlock()
 	d.resourceCache = nil
 	if d.httpClient != nil {
 		d.httpClient = nil
@@ -286,10 +299,12 @@ func (d *WebsiteDownloader) setupNetworkCapture(ctx context.Context) {
 			}
 			body, err := network.GetResponseBody(ev.RequestID).Do(ctx)
 			if err == nil && len(body) > 0 && len(body) <= maxResourceBytes {
+				d.networkResourcesMu.Lock()
 				d.networkResources[req.url] = &networkResource{
 					body:        body,
 					contentType: req.mimeType,
 				}
+				d.networkResourcesMu.Unlock()
 			}
 			delete(d.pendingReqs, ev.RequestID)
 		case *network.EventLoadingFailed:
@@ -530,6 +545,7 @@ func (d *WebsiteDownloader) fetchCSSTextFromBrowser(ctx context.Context, htmlCon
 		return
 	}
 
+	d.networkResourcesMu.Lock()
 	for _, item := range cssContents {
 		if _, exists := d.networkResources[item.URL]; !exists {
 			d.networkResources[item.URL] = &networkResource{
@@ -538,6 +554,7 @@ func (d *WebsiteDownloader) fetchCSSTextFromBrowser(ctx context.Context, htmlCon
 			}
 		}
 	}
+	d.networkResourcesMu.Unlock()
 
 	d.log(fmt.Sprintf("> Fetched %d stylesheets from browser", len(cssContents)))
 }
