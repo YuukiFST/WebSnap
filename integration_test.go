@@ -62,7 +62,7 @@ func TestIntegrationAccuracy(t *testing.T) {
 	workDir := "downloads/test_accuracy"
 	os.RemoveAll(workDir)
 
-	d := NewWebsiteDownloader("https://example.com", workDir, func(msg string) {
+	d := NewWebsiteDownloader("https://httpbin.org", workDir, func(msg string) {
 		t.Log(msg)
 	})
 
