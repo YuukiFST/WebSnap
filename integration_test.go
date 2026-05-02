@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestIntegrationSimpleSite(t *testing.T) {
@@ -95,4 +97,38 @@ if len(htmlData) < 1000 {
 
 	os.RemoveAll(workDir)
 	t.Logf("Accuracy test passed — %d assets, %d bytes HTML", len(entries), len(htmlData))
+}
+
+func TestHeavyPageDoesNotCrash(t *testing.T) {
+	bm, err := NewBrowserManager()
+	if err != nil {
+		t.Skipf("Cannot start browser: %v", err)
+	}
+	defer bm.Shutdown()
+
+	workDir := "downloads/test_heavy"
+	os.RemoveAll(workDir)
+
+	d := NewWebsiteDownloader("https://example.com", workDir, func(msg string) {
+		t.Log(msg)
+	})
+
+	tabCtx, tabCancel := bm.NewTab()
+	defer tabCancel()
+
+	processCtx, processCancel := context.WithTimeout(tabCtx, 30*time.Second)
+	defer processCancel()
+
+	err = d.Process(processCtx)
+	if err != nil {
+		t.Fatalf("process failed: %v", err)
+	}
+
+	// Verify output was produced
+	if _, err := os.Stat(workDir + "/index.html"); os.IsNotExist(err) {
+		t.Fatal("index.html was not created")
+	}
+
+	os.RemoveAll(workDir)
+	t.Log("Heavy page crash regression test passed")
 }
