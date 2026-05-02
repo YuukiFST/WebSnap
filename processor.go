@@ -415,7 +415,7 @@ func (d *WebsiteDownloader) processStylesheets(doc *goquery.Document) {
 		}
 
 		if cssContent != "" {
-			cssContent = d.processCSSImports(cssContent, absURL, false)
+			cssContent = d.processCSSImports(cssContent, absURL, false, 0)
 			cssContent = d.rewriteCSSURLs(cssContent, absURL, false)
 			localPath := d.saveResource(absURL, []byte(cssContent), "text/css")
 			if localPath != "" {
@@ -430,7 +430,7 @@ func (d *WebsiteDownloader) processInlineStyles(doc *goquery.Document) {
 	doc.Find("style").Each(func(i int, s *goquery.Selection) {
 		scriptText := s.Text()
 		if scriptText != "" {
-			newText := d.processCSSImports(scriptText, d.baseURL, true)
+			newText := d.processCSSImports(scriptText, d.baseURL, true, 0)
 			newText = d.rewriteCSSURLs(newText, d.baseURL, true)
 			if len(s.Nodes) > 0 && s.Nodes[0].FirstChild != nil {
 				s.Nodes[0].FirstChild.Data = newText
@@ -982,7 +982,13 @@ var webFontFamilyItemPattern = regexp.MustCompile(`["']([^"']+)["']`)
 var cssURLPattern = regexp.MustCompile(`url\(\s*([^)]+)\s*\)`)
 var cssImportPattern = regexp.MustCompile(`@import\s+(?:url\(\s*["']?([^)"']+)["']?\s*\)|["']([^"']+)["'])([^;]*);?`)
 
-func (d *WebsiteDownloader) processCSSImports(cssContent, cssBaseURL string, isInline bool) string {
+const maxCSSImportDepth = 5
+
+func (d *WebsiteDownloader) processCSSImports(cssContent, cssBaseURL string, isInline bool, depth int) string {
+	if depth > maxCSSImportDepth {
+		d.log(fmt.Sprintf("> CSS import depth limit (%d) reached, stopping recursion", maxCSSImportDepth))
+		return cssContent
+	}
 	return cssImportPattern.ReplaceAllStringFunc(cssContent, func(match string) string {
 		groups := cssImportPattern.FindStringSubmatch(match)
 		urlPart := groups[1]
@@ -1008,7 +1014,7 @@ func (d *WebsiteDownloader) processCSSImports(cssContent, cssBaseURL string, isI
 		}
 
 		if importedCSS != "" {
-			importedCSS = d.processCSSImports(importedCSS, absURL, false)
+			importedCSS = d.processCSSImports(importedCSS, absURL, false, depth+1)
 			importedCSS = d.rewriteCSSURLs(importedCSS, absURL, false)
 			localPath := d.saveResource(absURL, []byte(importedCSS), "text/css")
 			if localPath != "" {

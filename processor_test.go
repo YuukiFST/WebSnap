@@ -159,3 +159,23 @@ func TestEnsureWebFontLinks(t *testing.T) {
 		t.Error("Expected Google Fonts link element with Inconsolata and Roboto")
 	}
 }
+
+func TestProcessCSSImportsStopsAtMaxDepth(t *testing.T) {
+	d := NewWebsiteDownloader("http://example.com", t.TempDir(), func(string) {})
+	// Circular import: a.css imports b.css, b.css imports a.css
+	d.networkResources["http://example.com/a.css"] = &networkResource{
+		body:        []byte(`@import url("b.css");`),
+		contentType: "text/css",
+	}
+	d.networkResources["http://example.com/b.css"] = &networkResource{
+		body:        []byte(`@import url("a.css");`),
+		contentType: "text/css",
+	}
+
+	// Without a depth limit this would infinite-recurse / stack-overflow.
+	// With the cap it should return successfully.
+	result := d.processCSSImports(`@import url("a.css");`, "http://example.com", false, 0)
+	if result == "" {
+		t.Error("expected non-empty result")
+	}
+}
