@@ -432,6 +432,13 @@ func (d *WebsiteDownloader) getCookies(ctx context.Context) ([]*network.Cookie, 
 func (d *WebsiteDownloader) scrollPage(ctx context.Context) {
 	d.log("> Preparing scroll for lazy content...")
 
+	var nodeCount int
+	chromedp.Run(ctx, chromedp.Evaluate(`document.querySelectorAll('*').length`, &nodeCount))
+	if nodeCount > 30000 {
+		d.log(fmt.Sprintf("> Page has %d DOM nodes — aborting scroll to prevent memory exhaustion", nodeCount))
+		return
+	}
+
 	chromedp.Run(ctx, chromedp.Evaluate(`
 		(() => {
 			window.__webcopy_origStyles = {
@@ -466,6 +473,13 @@ func (d *WebsiteDownloader) scrollPage(ctx context.Context) {
 	current := 0
 	noChangeCount := 0
 	for iteration := 0; current < totalHeight && iteration < 10; iteration++ {
+		var loopNodeCount int
+		chromedp.Run(ctx, chromedp.Evaluate(`document.querySelectorAll('*').length`, &loopNodeCount))
+		if loopNodeCount > 30000 {
+			d.log(fmt.Sprintf("> DOM node count exploded to %d — aborting scroll", loopNodeCount))
+			break
+		}
+
 		chromedp.Run(ctx, chromedp.Evaluate(fmt.Sprintf(`
 			((pos) => {
 				window.scrollTo(0, pos);
