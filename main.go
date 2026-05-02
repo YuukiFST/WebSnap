@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -138,7 +139,10 @@ func (sm *sessionManager) runDownload(id, url string) {
 	tabCtx, tabCancel := bm.NewTab()
 	defer tabCancel()
 
-	if err := d.Process(tabCtx); err != nil {
+	processCtx, processCancel := context.WithTimeout(tabCtx, 150*time.Second)
+	defer processCancel()
+
+	if err := d.Process(processCtx); err != nil {
 		logFn(fmt.Sprintf("> Error: %s", err))
 		sm.mu.Lock()
 		s.Result = sessionResult{

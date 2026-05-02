@@ -62,3 +62,22 @@ func TestBrowserManagerMultipleTabs(t *testing.T) {
 		t.Fatal("Expected healthy after closing tab and opening new one")
 	}
 }
+
+func TestBrowserManagerTabContextHasTimeout(t *testing.T) {
+	bm, err := NewBrowserManager()
+	if err != nil {
+		t.Skipf("Cannot start browser: %v", err)
+	}
+	defer bm.Shutdown()
+
+	ctx, cancel := bm.NewTab()
+	defer cancel()
+
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("expected NewTab context to have a deadline")
+	}
+	if time.Until(deadline) > 3*time.Minute {
+		t.Fatalf("deadline too far in future: %v", deadline)
+	}
+}

@@ -13,6 +13,8 @@ type BrowserManager struct {
 	mu          sync.Mutex
 	allocCtx    context.Context
 	allocCancel context.CancelFunc
+	rootCtx     context.Context
+	rootCancel  context.CancelFunc
 	healthy     bool
 }
 
@@ -34,21 +36,29 @@ func NewBrowserManager() (*BrowserManager, error) {
 		chromedp.Flag("disable-webgl", true),
 		chromedp.Flag("disable-3d-apis", true),
 		chromedp.Flag("disable-accelerated-2d-canvas", true),
+		chromedp.Flag("js-flags", "--max_old_space_size=512 --max_semi_space_size=32"),
+		chromedp.Flag("memory-model", "low"),
+		chromedp.Flag("force-device-scale-factor", "1"),
+		chromedp.Flag("max-texture-size", "4096"),
+		chromedp.Flag("disable-features", "IsolateOrigins,site-per-process"),
 		chromedp.UserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
 		chromedp.WindowSize(1366, 768),
 	)
 
 	allocCtx, allocCancel := chromedp.NewExecAllocator(context.Background(), opts...)
 
-	rootCtx, _ := chromedp.NewContext(allocCtx)
+	rootCtx, rootCancel := chromedp.NewContext(allocCtx)
 	if err := chromedp.Run(rootCtx, chromedp.EmulateViewport(1366, 768)); err != nil {
+		rootCancel()
 		allocCancel()
 		return nil, fmt.Errorf("viewport: %w", err)
 	}
 
 	bm := &BrowserManager{
-		allocCtx:    rootCtx,
+		allocCtx:    allocCtx,
 		allocCancel: allocCancel,
+		rootCtx:     rootCtx,
+		rootCancel:  rootCancel,
 		healthy:     true,
 	}
 
@@ -60,7 +70,12 @@ func (bm *BrowserManager) NewTab() (context.Context, context.CancelFunc) {
 	defer bm.mu.Unlock()
 
 	ctx, cancel := chromedp.NewContext(bm.allocCtx)
-	return ctx, cancel
+	// Hard tab lifetime ceiling: 3 minutes. Prevents runaway tabs.
+	tabCtx, tabCancel := context.WithTimeout(ctx, 3*time.Minute)
+	return tabCtx, func() {
+		tabCancel()
+		cancel()
+	}
 }
 
 func (bm *BrowserManager) Healthy() bool {
@@ -97,6 +112,9 @@ func (bm *BrowserManager) Restart() error {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
 
+	if bm.rootCancel != nil {
+		bm.rootCancel()
+	}
 	if bm.allocCancel != nil {
 		bm.allocCancel()
 	}
@@ -108,6 +126,8 @@ func (bm *BrowserManager) Restart() error {
 
 	bm.allocCtx = newBM.allocCtx
 	bm.allocCancel = newBM.allocCancel
+	bm.rootCtx = newBM.rootCtx
+	bm.rootCancel = newBM.rootCancel
 	bm.healthy = newBM.healthy
 
 	return nil
@@ -117,6 +137,9 @@ func (bm *BrowserManager) Shutdown() {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
 
+	if bm.rootCancel != nil {
+		bm.rootCancel()
+	}
 	if bm.allocCancel != nil {
 		bm.allocCancel()
 	}
