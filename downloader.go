@@ -12,6 +12,7 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/chromedp/cdproto/fetch"
@@ -33,6 +34,7 @@ type WebsiteDownloader struct {
 	outputDir        string
 	assetsDir        string
 	resourceCache    map[string]string
+	resourceCacheMu  sync.Mutex
 	networkResources map[string]*networkResource
 	baseURL          string
 	logCallback      func(string)
@@ -100,9 +102,13 @@ func (d *WebsiteDownloader) generateFilename(assetURL, contentType string) strin
 }
 
 func (d *WebsiteDownloader) saveResource(assetURL string, content []byte, contentType string) string {
+	d.resourceCacheMu.Lock()
 	if cached, ok := d.resourceCache[assetURL]; ok {
+		d.resourceCacheMu.Unlock()
 		return cached
 	}
+	d.resourceCacheMu.Unlock()
+
 	if len(content) == 0 {
 		return ""
 	}
@@ -114,8 +120,38 @@ func (d *WebsiteDownloader) saveResource(assetURL string, content []byte, conten
 	}
 
 	relPath := "assets/" + filename
+	d.resourceCacheMu.Lock()
 	d.resourceCache[assetURL] = relPath
+	d.resourceCacheMu.Unlock()
 	return relPath
+}
+
+func (d *WebsiteDownloader) flushResources() {
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 4)
+
+	type resource struct {
+		url         string
+		body        []byte
+		contentType string
+	}
+	resources := make([]resource, 0, len(d.networkResources))
+	for u, r := range d.networkResources {
+		resources = append(resources, resource{u, r.body, r.contentType})
+	}
+
+	for _, r := range resources {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(url string, body []byte, ct string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			d.saveResource(url, body, ct)
+		}(r.url, r.body, r.contentType)
+	}
+
+	wg.Wait()
+	d.log(fmt.Sprintf("> Saved %d assets in parallel", len(resources)))
 }
 
 func (d *WebsiteDownloader) getResource(assetURL, base string) string {
@@ -213,6 +249,8 @@ func (d *WebsiteDownloader) Process(allocCtx context.Context) error {
 	if err := d.processHTML(finalHTML); err != nil {
 		return fmt.Errorf("process html: %w", err)
 	}
+
+	d.flushResources()
 
 	assetsCount := len(d.resourceCache)
 	d.log(fmt.Sprintf("> Done! %d assets saved", assetsCount))
@@ -322,7 +360,7 @@ func (d *WebsiteDownloader) navigateWithRetries(ctx context.Context) error {
 
 		if err == nil {
 			d.log(fmt.Sprintf("> Page loaded (%s)", s.waitFor))
-			time.Sleep(2500 * time.Millisecond)
+			time.Sleep(1500 * time.Millisecond)
 			return nil
 		}
 		lastErr = err
@@ -394,7 +432,8 @@ func (d *WebsiteDownloader) scrollPage(ctx context.Context) {
 	)
 
 	current := 0
-	for iteration := 0; current < totalHeight && iteration < 15; iteration++ {
+	noChangeCount := 0
+	for iteration := 0; current < totalHeight && iteration < 10; iteration++ {
 		chromedp.Run(ctx, chromedp.Evaluate(fmt.Sprintf(`
 			((pos) => {
 				window.scrollTo(0, pos);
@@ -404,18 +443,25 @@ func (d *WebsiteDownloader) scrollPage(ctx context.Context) {
 				containers.forEach(c => { c.scrollTop = pos; });
 			})(%d)
 		`, current), nil))
-		time.Sleep(400 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 		current += viewportHeight
 
 		var newHeight int
 		chromedp.Run(ctx, chromedp.Evaluate(`Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)`, &newHeight))
 		if newHeight > totalHeight {
 			totalHeight = newHeight
+			noChangeCount = 0
+		} else {
+			noChangeCount++
+		}
+
+		if noChangeCount >= 2 {
+			break
 		}
 	}
 
 	chromedp.Run(ctx, chromedp.Evaluate(`window.scrollTo(0, 0)`, nil))
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(300 * time.Millisecond)
 
 	chromedp.Run(ctx, chromedp.Evaluate(`
 		(() => {
@@ -433,7 +479,7 @@ func (d *WebsiteDownloader) scrollPage(ctx context.Context) {
 			delete window.__webcopy_origStyles;
 		})()
 	`, nil))
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(300 * time.Millisecond)
 }
 
 func (d *WebsiteDownloader) fetchCSSTextFromBrowser(ctx context.Context, htmlContent string) {
@@ -447,17 +493,17 @@ func (d *WebsiteDownloader) fetchCSSTextFromBrowser(ctx context.Context, htmlCon
 
 	script := `(async () => {
 		const links = document.querySelectorAll('link[rel="stylesheet"]');
-		const results = [];
-		for (const link of links) {
+		const fetchPromises = Array.from(links).map(async (link) => {
 			const href = link.href;
-			if (!href || href.startsWith('data:') || href.startsWith('blob:')) continue;
+			if (!href || href.startsWith('data:') || href.startsWith('blob:')) return null;
 			try {
 				const resp = await fetch(href, {cache: 'force-cache'});
-				if (!resp.ok) continue;
+				if (!resp.ok) return null;
 				const text = await resp.text();
-				results.push({url: href, content: text});
-			} catch(e) {}
-		}
+				return {url: href, content: text};
+			} catch(e) { return null; }
+		});
+		const results = (await Promise.all(fetchPromises)).filter(r => r !== null);
 		return results;
 	})()`
 
@@ -585,20 +631,35 @@ func (d *WebsiteDownloader) waitAndRemovePreloader(ctx context.Context) {
 func (d *WebsiteDownloader) waitForAnimationsToSettle(ctx context.Context) {
 	d.log("> Waiting for initial animations...")
 
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		var animating bool
-		chromedp.Run(ctx, chromedp.Evaluate(`
-			document.getAnimations().filter(a => a.playState === 'running').length > 0
-		`, &animating))
+	deadline := time.Now().Add(3 * time.Second)
+	var prevCount int = -1
+	var sameCount int = 0
 
-		if !animating {
+	for time.Now().Before(deadline) {
+		var count int
+		chromedp.Run(ctx, chromedp.Evaluate(`
+			document.getAnimations().filter(a => a.playState === 'running').length
+		`, &count))
+
+		if count == 0 {
 			break
 		}
+
+		if count == prevCount {
+			sameCount++
+		} else {
+			sameCount = 0
+		}
+		prevCount = count
+
+		if sameCount >= 3 {
+			break
+		}
+
 		time.Sleep(300 * time.Millisecond)
 	}
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(500 * time.Millisecond)
 }
 
 func (d *WebsiteDownloader) extractIframeContent(ctx context.Context) (string, bool) {
