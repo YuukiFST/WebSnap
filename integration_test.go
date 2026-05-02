@@ -75,9 +75,9 @@ func TestIntegrationAccuracy(t *testing.T) {
 		t.Fatal("index.html not found")
 	}
 
-	if len(htmlData) < 500 {
-		t.Fatal("index.html too small — likely incomplete capture")
-	}
+if len(htmlData) < 1000 {
+    t.Fatal("index.html too small — likely incomplete capture")
+}
 
 	content := string(htmlData)
 	if !strings.Contains(content, "<html") {
