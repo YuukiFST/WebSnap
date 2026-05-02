@@ -350,7 +350,7 @@ func (d *WebsiteDownloader) navigateWithRetries(ctx context.Context) error {
 
 	var lastErr error
 	for _, s := range strategies {
-		navCtx, cancel := context.WithTimeout(ctx, s.timeout)
+		navCtx, _ := context.WithTimeout(ctx, s.timeout)
 		var err error
 		switch s.waitFor {
 		case "domcontentloaded":
@@ -371,7 +371,6 @@ func (d *WebsiteDownloader) navigateWithRetries(ctx context.Context) error {
 				}),
 			)
 		}
-		cancel()
 
 		if err == nil {
 			d.log(fmt.Sprintf("> Page loaded (%s)", s.waitFor))
