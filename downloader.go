@@ -23,6 +23,7 @@ import (
 )
 
 const maxResourceBytes = 8 * 1024 * 1024
+const maxTotalNetworkResources = 5000
 
 type networkResource struct {
 	body        []byte
@@ -129,6 +130,19 @@ func (d *WebsiteDownloader) saveResource(assetURL string, content []byte, conten
 	return relPath
 }
 
+func (d *WebsiteDownloader) storeNetworkResource(url string, body []byte, contentType string) bool {
+	d.networkResourcesMu.Lock()
+	defer d.networkResourcesMu.Unlock()
+	if _, exists := d.networkResources[url]; exists {
+		return true
+	}
+	if len(d.networkResources) >= maxTotalNetworkResources {
+		return false
+	}
+	d.networkResources[url] = &networkResource{body: body, contentType: contentType}
+	return true
+}
+
 func (d *WebsiteDownloader) flushResources() {
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 4)
@@ -140,8 +154,13 @@ func (d *WebsiteDownloader) flushResources() {
 	}
 	d.networkResourcesMu.RLock()
 	resources := make([]resource, 0, len(d.networkResources))
+	count := 0
 	for u, r := range d.networkResources {
+		if count >= maxTotalNetworkResources {
+			break
+		}
 		resources = append(resources, resource{u, r.body, r.contentType})
+		count++
 	}
 	d.networkResourcesMu.RUnlock()
 
@@ -278,6 +297,7 @@ func (d *WebsiteDownloader) Process(allocCtx context.Context) error {
 }
 
 func (d *WebsiteDownloader) setupNetworkCapture(ctx context.Context) {
+	capWarned := false
 	chromedp.ListenTarget(ctx, func(ev interface{}) {
 		switch ev := ev.(type) {
 		case *network.EventResponseReceived:
@@ -299,12 +319,10 @@ func (d *WebsiteDownloader) setupNetworkCapture(ctx context.Context) {
 			}
 			body, err := network.GetResponseBody(ev.RequestID).Do(ctx)
 			if err == nil && len(body) > 0 && len(body) <= maxResourceBytes {
-				d.networkResourcesMu.Lock()
-				d.networkResources[req.url] = &networkResource{
-					body:        body,
-					contentType: req.mimeType,
+				if !d.storeNetworkResource(req.url, body, req.mimeType) && !capWarned {
+					capWarned = true
+					d.log(fmt.Sprintf("> Resource cap reached (%d), skipping remaining", maxTotalNetworkResources))
 				}
-				d.networkResourcesMu.Unlock()
 			}
 			delete(d.pendingReqs, ev.RequestID)
 		case *network.EventLoadingFailed:
@@ -544,18 +562,16 @@ func (d *WebsiteDownloader) fetchCSSTextFromBrowser(ctx context.Context, htmlCon
 		return
 	}
 
-	d.networkResourcesMu.Lock()
+	stored := 0
 	for _, item := range cssContents {
-		if _, exists := d.networkResources[item.URL]; !exists {
-			d.networkResources[item.URL] = &networkResource{
-				body:        []byte(item.Content),
-				contentType: "text/css",
-			}
+		if !d.storeNetworkResource(item.URL, []byte(item.Content), "text/css") {
+			d.log(fmt.Sprintf("> Resource cap reached (%d), skipping remaining CSS", maxTotalNetworkResources))
+			break
 		}
+		stored++
 	}
-	d.networkResourcesMu.Unlock()
 
-	d.log(fmt.Sprintf("> Fetched %d stylesheets from browser", len(cssContents)))
+	d.log(fmt.Sprintf("> Fetched %d/%d stylesheets from browser", stored, len(cssContents)))
 }
 
 func (d *WebsiteDownloader) waitAndRemovePreloader(ctx context.Context) {
