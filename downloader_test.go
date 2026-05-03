@@ -106,3 +106,25 @@ func TestDownloadMissingResourcesNoHTTPClient(t *testing.T) {
 		t.Errorf("expected 0 resources when httpClient is nil, got %d", len(d.networkResources))
 	}
 }
+
+func TestCollectDynamicURLsHandlesError(t *testing.T) {
+	bm, err := NewBrowserManager()
+	if err != nil {
+		t.Skipf("Cannot start browser: %v", err)
+	}
+	defer bm.Shutdown()
+
+	ctx, cancel := bm.NewTab()
+	defer cancel()
+
+	d := NewWebsiteDownloader("about:blank", t.TempDir(), func(string) {})
+
+	// Should not panic on a blank page
+	urls := d.collectDynamicURLs(ctx)
+	if urls == nil {
+		t.Fatal("expected empty slice, got nil")
+	}
+	if len(urls) != 0 {
+		t.Fatalf("expected 0 URLs on blank page, got %d", len(urls))
+	}
+}

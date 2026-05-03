@@ -24,6 +24,7 @@ import (
 
 const maxResourceBytes = 8 * 1024 * 1024
 const maxTotalNetworkResources = 5000
+const maxParallelDownloads = 8
 
 type networkResource struct {
 	body        []byte
@@ -255,6 +256,9 @@ func (d *WebsiteDownloader) Process(allocCtx context.Context) error {
 
 	d.waitForAnimationsToSettle(ctx)
 
+	dynamicURLs := d.collectDynamicURLs(ctx)
+	d.downloadMissingResources(dynamicURLs)
+
 	sessionCookies, err := d.getCookies(ctx)
 	if err == nil {
 		d.httpClient = newCookiedHTTPClient(sessionCookies, d.baseURL)
@@ -276,9 +280,6 @@ func (d *WebsiteDownloader) Process(allocCtx context.Context) error {
 	d.log(fmt.Sprintf("> Captured %d network resources", resourceCount))
 
 	d.fetchCSSTextFromBrowser(ctx, finalHTML)
-
-	dynamicURLs := d.collectDynamicURLs(ctx)
-	d.downloadMissingResources(dynamicURLs)
 
 	d.log("> Processing HTML and assets...")
 	if err := d.processHTML(finalHTML); err != nil {
@@ -632,22 +633,12 @@ func (d *WebsiteDownloader) collectDynamicURLs(ctx context.Context) []string {
 			}
 		} catch(e) {}
 
-		// Dynamic imports
-		const origImport = window.__webcopy_origImport || (window.__webcopy_origImport = window.import);
-		if (origImport && !window.__webcopy_importPatched) {
-			window.import = function(specifier) {
-				if (typeof specifier === 'string') urls.add(specifier);
-				return origImport.apply(this, arguments);
-			};
-			window.__webcopy_importPatched = true;
-		}
-
 		// Workers
-		const OrigWorker = window.__webcopy_origWorker || (window.__webcopy_origWorker = window.Worker);
-		if (OrigWorker && !window.__webcopy_workerPatched) {
+		const origWorker = window.__webcopy_origWorker || (window.__webcopy_origWorker = window.Worker);
+		if (origWorker && !window.__webcopy_workerPatched) {
 			window.Worker = function(url, options) {
 				if (typeof url === 'string') urls.add(url);
-				return new OrigWorker(url, options);
+				return new origWorker(url, options);
 			};
 			window.__webcopy_workerPatched = true;
 		}
@@ -664,18 +655,14 @@ func (d *WebsiteDownloader) collectDynamicURLs(ctx context.Context) []string {
 		}
 
 		// XHR
-		const origOpen = XMLHttpRequest.prototype.open;
 		if (!window.__webcopy_xhrPatched) {
+			const origOpen = XMLHttpRequest.prototype.open;
 			XMLHttpRequest.prototype.open = function(method, url) {
 				urls.add(url);
 				return origOpen.apply(this, arguments);
 			};
 			window.__webcopy_xhrPatched = true;
 		}
-
-		// Trigger any lazy-loaded fonts/styles by querying common selectors
-		document.querySelectorAll('link[rel="stylesheet"]').forEach(l => urls.add(l.href));
-		document.querySelectorAll('img[src], video[src], audio[src], source[src]').forEach(el => urls.add(el.src));
 
 		return Array.from(urls).filter(u => u && !u.startsWith('data:') && !u.startsWith('blob:'));
 	})()`
@@ -701,7 +688,7 @@ func (d *WebsiteDownloader) downloadMissingResources(urls []string) {
 		return
 	}
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, 8)
+	sem := make(chan struct{}, maxParallelDownloads)
 	downloaded := 0
 	var mu sync.Mutex
 
@@ -727,7 +714,11 @@ func (d *WebsiteDownloader) downloadMissingResources(urls []string) {
 			if err != nil || len(body) == 0 {
 				return
 			}
-			if d.storeNetworkResource(url, body, ct) {
+			d.networkResourcesMu.Lock()
+			_, alreadyExists := d.networkResources[url]
+			d.networkResourcesMu.Unlock()
+
+			if !alreadyExists && d.storeNetworkResource(url, body, ct) {
 				mu.Lock()
 				downloaded++
 				mu.Unlock()
