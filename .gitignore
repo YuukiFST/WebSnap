@@ -3,3 +3,4 @@ mcpmarket.com/
 webcopy.exe
 webcopy_test.exe
 *.exe~
+.worktrees/
