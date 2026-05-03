@@ -70,12 +70,7 @@ func (bm *BrowserManager) NewTab() (context.Context, context.CancelFunc) {
 	defer bm.mu.Unlock()
 
 	ctx, cancel := chromedp.NewContext(bm.allocCtx)
-	// Hard tab lifetime ceiling: 3 minutes. Prevents runaway tabs.
-	tabCtx, tabCancel := context.WithTimeout(ctx, 3*time.Minute)
-	return tabCtx, func() {
-		tabCancel()
-		cancel()
-	}
+	return ctx, cancel
 }
 
 func (bm *BrowserManager) Healthy() bool {

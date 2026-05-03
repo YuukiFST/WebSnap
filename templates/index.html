@@ -1,9 +1,11 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en" class="dark fira_mono_f2cab34b-module__lnvfWW__className" style="scroll-behavior: auto; color-scheme: dark;">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebCopy</title>
+    <title>WebCopy Chat</title>
+    <link rel="stylesheet" href="../skills.sh/assets/0c_qzq57rhffo_e49faa47bb91.css" data-precedence="next"/>
+    <link rel="stylesheet" href="../skills.sh/assets/0enikh1-a3zwa_25e652101050.css" data-precedence="next"/>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -11,20 +13,39 @@
             theme: {
                 extend: {
                     colors: {
-                        gray: {
-                            950: '#030712',
+                        background: "var(--ds-background)",
+                        foreground: "var(--ds-foreground)",
+                        border: "var(--ds-gray-200)",
+                        muted: {
+                            DEFAULT: "var(--ds-gray-100)",
+                            foreground: "var(--ds-gray-600)",
+                        },
+                        primary: {
+                            DEFAULT: "var(--ds-gray-1000)",
+                            foreground: "var(--ds-background)",
                         }
+                    },
+                    fontFamily: {
+                        sans: ['Geist', 'sans-serif'],
+                        mono: ['Fira Mono', 'monospace'],
                     }
                 }
             }
         }
     </script>
     <style>
+        :root {
+            /* Fallback variables if CSS doesn't load correctly */
+            --ds-background: 0, 0, 0;
+            --ds-foreground: 255, 255, 255;
+        }
+
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
-        html, body {
-            scroll-behavior: smooth;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+        body {
+            background-color: var(--ds-background);
+            color: var(--ds-foreground);
+            overflow-x: hidden;
         }
 
         /* ========== GENESIS SPINNER ========== */
@@ -37,232 +58,205 @@
             width: 12px;
             height: 12px;
             border: 1.5px solid transparent;
-            border-top: 1.5px solid rgba(6, 182, 212, 0.6);
+            border-top: 1.5px solid currentColor;
             border-radius: 50%;
             animation: genesis__spin 0.8s linear infinite;
             display: inline-block;
         }
 
-        /* ========== GRID OVERLAY ========== */
-        .grid-overlay {
-            background-image: linear-gradient(rgba(6, 182, 212, 0.1) 1px, transparent 1px),
-                              linear-gradient(90deg, rgba(6, 182, 212, 0.1) 1px, transparent 1px);
-            background-size: 50px 50px;
-        }
-
-        /* ========== CARD ANIMATION ========== */
-        @keyframes cardIn {
+        /* ========== CHAT ANIMATIONS ========== */
+        @keyframes slideIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
-        .download-card { animation: cardIn 0.3s ease; }
-
-        /* ========== CARD STATUS BADGES ========== */
-        .card-status {
-            font-size: 0.75rem;
-            padding: 2px 8px;
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            white-space: nowrap;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-            border: 1px solid;
-        }
-        .card-status.queued {
-            background-color: rgba(245, 158, 11, 0.082);
-            border-color: rgba(245, 158, 11, 0.25);
-            color: rgb(245, 158, 11);
-        }
-        .card-status.processing {
-            background-color: rgba(6, 182, 212, 0.082);
-            border-color: rgba(6, 182, 212, 0.25);
-            color: rgb(6, 182, 212);
-        }
-        .card-status.complete {
-            background-color: rgba(16, 185, 129, 0.082);
-            border-color: rgba(16, 185, 129, 0.25);
-            color: rgb(16, 185, 129);
-        }
-        .card-status.error {
-            background-color: rgba(248, 113, 113, 0.082);
-            border-color: rgba(248, 113, 113, 0.25);
-            color: rgb(248, 113, 113);
+        .chat-message { 
+            animation: slideIn 0.3s ease-out; 
         }
 
         /* ========== LOG AREA ========== */
         .card-log {
-            border-top: 1px solid rgb(31, 41, 55);
-            padding: 0.5rem 1rem;
-            max-height: 160px;
+            padding: 0.75rem 1rem;
+            max-height: 200px;
             overflow-y: auto;
-            font-size: 0.73rem;
-            color: rgb(107, 114, 128);
-            line-height: 1.7;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.8125rem;
+            color: var(--ds-gray-600);
+            line-height: 1.6;
+            font-family: var(--font-fira-mono), monospace;
+            background-color: rgba(var(--ds-gray-100), 0.3);
+            border-radius: 0.375rem;
+            margin-top: 0.75rem;
         }
         .card-log .log-entry { padding: 1px 0; }
-        .card-log .log-entry:last-child { color: rgb(156, 163, 175); }
-
-        /* ========== SUCCESS SECTION ========== */
-        .card-success {
-            border-top: 1px solid rgb(31, 41, 55);
-            padding: 0.5rem 1rem;
-            font-size: 0.8rem;
-            color: rgb(52, 211, 153);
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        }
-        .card-success a { color: rgb(34, 211, 238); text-decoration: underline; }
-        .card-success a:hover { color: rgb(103, 232, 249); }
-
-        /* ========== QUEUE POSITION ========== */
-        .card-queue-pos {
-            border-top: 1px solid rgb(31, 41, 55);
-            padding: 0.5rem 1rem;
-            font-size: 0.73rem;
-            color: rgb(107, 114, 128);
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        }
-
-        /* ========== CARD HEADER ========== */
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0.75rem 1rem;
-            cursor: pointer;
-            user-select: none;
-            transition: background 0.15s;
-            gap: 0.5rem;
-        }
-        .card-header:hover { background: rgba(6, 182, 212, 0.05); }
-
-        .card-url {
-            color: rgb(229, 231, 235);
-            font-size: 0.85rem;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            max-width: 65%;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        }
-
-        /* ========== INPUT AREA ========== */
-        .input-prompt {
-            color: rgb(34, 211, 238);
-            font-size: 1rem;
-            flex-shrink: 0;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        }
+        .card-log .log-entry:last-child { color: var(--ds-foreground); }
 
         /* ========== SCROLLBAR ========== */
-        .downloads-area::-webkit-scrollbar,
-        .card-log::-webkit-scrollbar { width: 4px; }
-        .downloads-area::-webkit-scrollbar-track,
-        .card-log::-webkit-scrollbar-track { background: transparent; }
-        .downloads-area::-webkit-scrollbar-thumb,
-        .card-log::-webkit-scrollbar-thumb { background: rgb(31, 41, 55); border-radius: 2px; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--ds-gray-200); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--ds-gray-400); }
+
+        .message-bubble {
+            max-width: 85%;
+        }
+
+        .user-message {
+            align-self: flex-end;
+            background-color: var(--ds-background);
+            border: 1px solid var(--ds-gray-200);
+            padding: 0.5rem 1rem;
+            border-radius: 1rem 1rem 0.25rem 1rem;
+        }
+
+        .bot-message {
+            align-self: flex-start;
+            background-color: var(--ds-background);
+            border: 1px solid var(--ds-gray-200);
+            padding: 1.25rem;
+            border-radius: 0.5rem;
+            width: 100%;
+            max-width: 42rem;
+        }
+
+        .status-badge-base {
+            padding: 0.125rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.025em;
+            font-family: var(--font-fira-mono), monospace;
+        }
+
+        /* Skills specific components adaptation */
+        .composer-input {
+            border-bottom: 1px solid var(--ds-gray-400);
+            transition: border-color 0.1s;
+        }
+        .composer-input:focus-within {
+            border-color: var(--ds-gray-1000);
+        }
     </style>
 </head>
-<body class="min-h-screen bg-gradient-to-br from-gray-950 via-black to-gray-950 m-0 leading-[inherit]">
+<body class="geist_a71539c9-module__T19VSG__variable geist_mono_8d43a2aa-module__8Li5zG__variable fira_mono_f2cab34b-module__lnvfWW__variable flex flex-col h-screen">
 
-    <!-- Grid Overlay -->
-    <div class="fixed inset-0 opacity-20 pointer-events-none">
-        <div class="absolute inset-0 grid-overlay"></div>
-    </div>
-
-    <!-- Header -->
-    <header class="relative border-b border-gray-800 bg-black/50 backdrop-blur-xl">
-        <div class="max-w-2xl mx-auto px-6 py-4">
-            <div class="flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                    <div class="relative">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-7 h-7 text-cyan-400" aria-hidden="true"><path d="M12 19h8"></path><path d="m4 17 6-6-6-6"></path></svg>
-                        <div class="absolute inset-0 blur-lg bg-cyan-400/30 -z-10"></div>
-                    </div>
-                    <div>
-                        <h1 class="text-xl font-bold text-white flex items-center gap-2">&gt; WebCopy_</h1>
-                        <p class="text-xs text-gray-500">~/downloads/queue</p>
-                    </div>
-                </div>
-                <div class="flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-cyan-400" aria-hidden="true"><path d="m18 16 4-4-4-4"></path><path d="m6 8-4 4 4 4"></path><path d="m14.5 4-5 16"></path></svg>
-                    <span class="text-xs text-gray-400">v1.0</span>
-                </div>
+    <!-- Header (Skills Style) -->
+    <header class="flex-none sticky top-0 z-50 bg-background border-b border-border">
+        <div class="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <a title="WebCopy" href="#">
+                    <svg data-testid="geist-icon" height="18" stroke-linejoin="round" viewBox="0 0 16 16" width="18" style="color:currentcolor">
+                        <path fill-rule="evenodd" clip-rule="evenodd" d="M8 1L16 15H0L8 1Z" fill="currentColor"></path>
+                    </svg>
+                </a>
+                <span class="text-(--ds-gray-500)">
+                    <svg data-testid="geist-icon" height="16" stroke-linejoin="round" viewBox="0 0 16 16" width="16" style="color:currentcolor">
+                        <path fill-rule="evenodd" clip-rule="evenodd" d="M4.01526 15.3939L4.3107 14.7046L10.3107 0.704556L10.6061 0.0151978L11.9849 0.606077L11.6894 1.29544L5.68942 15.2954L5.39398 15.9848L4.01526 15.3939Z" fill="currentColor"></path>
+                    </svg>
+                </span>
+                <a href="#"><span class="font-medium tracking-tight text-lg">WebCopy Chat</span></a>
+            </div>
+            <div class="flex items-center gap-4">
+                <span class="text-xs font-mono text-(--ds-gray-600)">v1.0.0</span>
             </div>
         </div>
     </header>
 
-    <!-- Main -->
-    <main class="relative max-w-2xl mx-auto px-6 py-8">
-        <div class="flex flex-col gap-6" style="min-height: calc(100vh - 200px);">
-
-            <!-- Empty State -->
-            <div id="emptyState" class="flex-1 flex items-center justify-center">
-                <div class="text-center space-y-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-10 h-10 text-gray-700 mx-auto" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" x2="12" y1="15" y2="3"></line></svg>
-                    <p class="text-gray-600 text-sm leading-relaxed">
-                        Paste a URL below and press Enter<br>
-                        to download a website replica
+    <!-- Chat Area -->
+    <main class="flex-1 overflow-y-auto" id="chatArea">
+        <div class="max-w-3xl mx-auto p-4 md:p-8 flex flex-col gap-10">
+            
+            <!-- Welcome Message (Skills Hero Style) -->
+            <div class="chat-message bot-message border-none p-0 bg-transparent space-y-6">
+                <div class="space-y-4">
+                    <p class="text-[15px] lg:text-[19px] tracking-tight text-primary font-mono font-medium uppercase">Website Replication Bot</p>
+                    <h2 class="text-xl sm:text-2xl lg:text-3xl leading-tight tracking-tight text-balance">Download pixel-perfect replicas of any website.</h2>
+                    <p class="text-(--ds-gray-600) text-base leading-relaxed max-w-xl">
+                        Paste a URL below to start a new cloning session. I'll download all assets and package them into a ZIP for you.
                     </p>
                 </div>
-            </div>
-
-            <!-- Downloads Area -->
-            <div class="downloads-area flex flex-col gap-3 flex-1 overflow-y-auto" id="downloadsArea"></div>
-
-            <!-- Queue Info -->
-            <div class="queue-info text-center text-xs text-gray-600 py-2 min-h-[1.5rem]" id="queueInfo"></div>
-
-            <!-- Input Area -->
-            <div class="pt-4 border-t border-gray-800">
-                <div class="flex gap-3 items-center">
-                    <span class="input-prompt shrink-0">&gt;</span>
-                    <input type="url" id="urlInput" placeholder="paste URL here..."
-                        class="flex-1 pl-4 pr-3 py-2.5 bg-black/40 border border-gray-800 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 transition-colors text-sm"
-                        autofocus>
-                    <button onclick="addUrl()"
-                        class="shrink-0 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 relative overflow-hidden disabled:cursor-not-allowed bg-cyan-500/10 text-cyan-400 border border-cyan-500/50 hover:bg-cyan-500/20 hover:border-cyan-400">
-                        &gt; Submit
+                <div class="flex flex-wrap gap-2 font-mono">
+                    <button onclick="setInput('https://example.com')" class="text-xs text-(--ds-gray-600) hover:text-foreground border-b border-transparent hover:border-foreground transition-colors pb-0.5">
+                        example.com
+                    </button>
+                    <button onclick="setInput('https://github.com')" class="text-xs text-(--ds-gray-600) hover:text-foreground border-b border-transparent hover:border-foreground transition-colors pb-0.5">
+                        github.com
                     </button>
                 </div>
             </div>
 
+            <!-- Messages Container -->
+            <div id="messagesContainer" class="flex flex-col gap-10"></div>
+
+            <!-- Empty space for scrolling -->
+            <div class="h-32"></div>
         </div>
     </main>
 
-    <!-- Footer -->
-    <footer class="relative border-t border-gray-800 bg-black/50 backdrop-blur-xl mt-8">
-        <div class="max-w-2xl mx-auto px-6 py-3">
-            <div class="flex items-center justify-between text-xs text-gray-600">
-                <p>WebCopy · Download pixel-perfect replicas</p>
-                <div class="flex items-center gap-1.5">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3" aria-hidden="true"><path d="M12 19h8"></path><path d="m4 17 6-6-6-6"></path></svg>
-                    <span>JS Rendered</span>
+    <!-- Bottom Composer (Skills Search/Input Style) -->
+    <div class="flex-none p-4 md:p-8 bg-background border-t border-border">
+        <div class="max-w-3xl mx-auto relative">
+            <h2 class="text-sm font-mono font-medium tracking-normal text-foreground uppercase mb-3.5">Target URL</h2>
+            <div class="composer-input flex items-center justify-between gap-4 py-1">
+                <div class="flex-1 relative">
+                    <span class="absolute left-0 inset-y-0 flex items-center text-muted-foreground font-mono text-sm">$</span>
+                    <textarea id="urlInput" rows="1" 
+                        class="w-full bg-transparent border-none focus:ring-0 text-base lg:text-sm py-2 pl-5 pr-8 resize-none max-h-32 text-foreground placeholder:text-(--ds-gray-600) font-mono"
+                        placeholder="https://your-target-site.com"></textarea>
+                </div>
+                
+                <div class="flex items-center gap-3">
+                    <div class="hidden sm:flex items-center pointer-events-none">
+                        <kbd class="text-sm text-muted-foreground px-1.5 py-0.5 rounded border border-border font-mono">/</kbd>
+                    </div>
+                    <button onclick="addUrl()" id="sendBtn"
+                        class="p-1.5 rounded cursor-pointer transition-colors text-muted-foreground hover:text-foreground">
+                        <svg viewBox="0 0 16 16" height="20" width="20" data-slot="geist-icon" style="color:currentColor">
+                            <path fill="currentColor" fill-rule="evenodd" d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
+                        </svg>
+                    </button>
                 </div>
             </div>
+            <div id="queueInfo" class="mt-2 text-[10px] uppercase tracking-widest font-mono font-semibold text-(--ds-gray-600) h-4"></div>
         </div>
-    </footer>
+    </div>
 
     <script>
         const queue = [];
         let processing = null;
         let cardCounter = 0;
 
+        const urlInput = document.getElementById('urlInput');
+        
+        urlInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = (this.scrollHeight) + 'px';
+        });
+
+        urlInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                addUrl();
+            }
+        });
+
+        function setInput(url) {
+            urlInput.value = url;
+            urlInput.focus();
+            urlInput.dispatchEvent(new Event('input'));
+        }
+
         function addUrl() {
-            const input = document.getElementById('urlInput');
-            const url = input.value.trim();
+            const url = urlInput.value.trim();
             if (!url) return;
 
-            input.value = '';
-            input.focus();
-
-            const emptyState = document.getElementById('emptyState');
-            if (emptyState) emptyState.remove();
+            urlInput.value = '';
+            urlInput.style.height = 'auto';
+            
+            addUserMessage(url);
 
             const id = 'card-' + (++cardCounter);
             const isQueued = processing !== null;
-            const card = createCard(id, url, isQueued);
+            const card = createBotCard(id, url, isQueued);
 
             if (!processing) {
                 startProcessing({ id, url, card });
@@ -271,35 +265,51 @@
                 updateQueuePositions();
             }
             updateQueueInfo();
+            scrollToBottom();
         }
 
-        function createCard(id, url, isQueued) {
-            const area = document.getElementById('downloadsArea');
+        function addUserMessage(text) {
+            const container = document.getElementById('messagesContainer');
+            const msg = document.createElement('div');
+            msg.className = 'chat-message user-message';
+            msg.innerHTML = `<div class="text-sm font-mono text-foreground">${escapeHtml(text)}</div>`;
+            container.appendChild(msg);
+        }
+
+        function createBotCard(id, url, isQueued) {
+            const container = document.getElementById('messagesContainer');
             const card = document.createElement('div');
-            card.className = 'download-card rounded-lg border border-gray-800 bg-gradient-to-br from-black/60 via-gray-900/40 to-black/60 backdrop-blur-sm overflow-hidden';
+            card.className = 'chat-message bot-message hover:bg-(--ds-gray-100)/30 transition-colors';
             card.id = id;
 
             const displayUrl = formatUrl(url);
 
+            let content = `
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3 overflow-hidden">
+                        <div class="w-5 h-5 rounded-sm bg-(--ds-gray-100) flex items-center justify-center flex-none">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3 text-(--ds-gray-600)"><path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" /></svg>
+                        </div>
+                        <span class="text-sm font-mono text-foreground truncate">${escapeHtml(displayUrl)}</span>
+                    </div>
+                    <div class="status-badge"></div>
+                </div>
+                <div class="log-container"></div>
+            `;
+
+            card.innerHTML = content;
+            
+            const badge = card.querySelector('.status-badge');
             if (isQueued) {
-                const pos = queue.length + 1;
-                card.innerHTML =
-                    '<div class="card-header" onclick="toggleLog(\'' + id + '\')">' +
-                        '<span class="card-url">' + escapeHtml(displayUrl) + '</span>' +
-                        '<span class="card-status queued">Queued</span>' +
-                    '</div>' +
-                    '<div class="card-queue-pos">Queue position: #' + pos + '</div>';
+                badge.innerHTML = `<span class="status-badge-base bg-(--ds-gray-100) text-(--ds-gray-600)">Queued</span>`;
+                card.querySelector('.log-container').innerHTML = `<div class="text-xs font-mono text-(--ds-gray-600) mt-2 italic queue-pos-text">Waiting at position #${queue.length + 1}...</div>`;
             } else {
-                card.innerHTML =
-                    '<div class="card-header" onclick="toggleLog(\'' + id + '\')">' +
-                        '<span class="card-url">' + escapeHtml(displayUrl) + '</span>' +
-                        '<span class="card-status processing"><span class="spinner-small"></span>Starting</span>' +
-                    '</div>' +
-                    '<div class="card-log"></div>';
+                badge.innerHTML = `<span class="status-badge-base bg-foreground/10 text-foreground flex items-center gap-1.5"><span class="spinner-small"></span> Active</span>`;
+                card.querySelector('.log-container').innerHTML = `<div class="card-log"></div>`;
             }
 
-            area.appendChild(card);
-            area.scrollTop = area.scrollHeight;
+            container.appendChild(card);
+            scrollToBottom();
             return card;
         }
 
@@ -307,17 +317,13 @@
             processing = entry;
             const card = entry.card;
 
-            const status = card.querySelector('.card-status');
-            status.className = 'card-status processing';
-            status.innerHTML = '<span class="spinner-small"></span>Starting';
+            const badge = card.querySelector('.status-badge');
+            badge.innerHTML = `<span class="status-badge-base bg-foreground/10 text-foreground flex items-center gap-1.5"><span class="spinner-small"></span> Active</span>`;
 
             let logArea = card.querySelector('.card-log');
             if (!logArea) {
-                const qp = card.querySelector('.card-queue-pos');
-                if (qp) qp.remove();
-                logArea = document.createElement('div');
-                logArea.className = 'card-log';
-                card.appendChild(logArea);
+                card.querySelector('.log-container').innerHTML = `<div class="card-log"></div>`;
+                logArea = card.querySelector('.card-log');
             }
 
             fetch('/start-download', {
@@ -346,9 +352,22 @@
                 line.textContent = event.data;
                 logArea.appendChild(line);
                 logArea.scrollTop = logArea.scrollHeight;
+                
+                const chatArea = document.getElementById('chatArea');
+                const isNearBottom = chatArea.scrollHeight - chatArea.scrollTop - chatArea.clientHeight < 100;
+                if (isNearBottom) scrollToBottom();
+            };
 
-                const area = document.getElementById('downloadsArea');
-                area.scrollTop = area.scrollHeight;
+            es.onmessage = function(event) {
+                const line = document.createElement('div');
+                line.className = 'log-entry';
+                line.textContent = event.data;
+                logArea.appendChild(line);
+                logArea.scrollTop = logArea.scrollHeight;
+                
+                const chatArea = document.getElementById('chatArea');
+                const isNearBottom = chatArea.scrollHeight - chatArea.scrollTop - chatArea.clientHeight < 100;
+                if (isNearBottom) scrollToBottom();
             };
 
             es.addEventListener('done', function(event) {
@@ -367,9 +386,9 @@
         }
 
         function onComplete(entry) {
-            const status = entry.card.querySelector('.card-status');
-            status.className = 'card-status complete';
-            status.textContent = 'Done';
+            const card = entry.card;
+            const badge = card.querySelector('.status-badge');
+            badge.innerHTML = `<span class="status-badge-base bg-emerald-500/10 text-emerald-500">Done</span>`;
 
             const a = document.createElement('a');
             a.href = '/download-file/' + entry.sessionId;
@@ -378,78 +397,87 @@
             a.click();
             setTimeout(function() { a.remove(); }, 100);
 
-            const div = document.createElement('div');
-            div.className = 'card-success';
-            div.innerHTML = '✓ ZIP downloaded · <a href="/download-file/' +
-                entry.sessionId + '">Download again</a>';
-            entry.card.appendChild(div);
-
-            const logArea = entry.card.querySelector('.card-log');
+            const successDiv = document.createElement('div');
+            successDiv.className = 'mt-6 flex items-center justify-between p-4 bg-(--ds-gray-100)/50 border border-border rounded-md';
+            successDiv.innerHTML = `
+                <div class="flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-sm bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+                        <svg viewBox="0 0 16 16" height="20" width="20"><path fill="currentColor" fill-rule="evenodd" d="M2.75.5C1.78.5 1 1.28 1 2.25v7.5c0 .97.78 1.75 1.75 1.75H4.5V10H2.75a.25.25 0 0 1-.25-.25v-7.5c0-.14.11-.25.25-.25h5.5c.14 0 .25.11.25.25V3H10v-.75C10 1.28 9.22.5 8.25.5zm5 4C6.78 4.5 6 5.28 6 6.25v7.5c0 .97.78 1.75 1.75 1.75h5.5c.97 0 1.75-.78 1.75-1.75v-7.5c0-.97-.78-1.75-1.75-1.75zM7.5 6.25c0-.14.11-.25.25-.25h5.5c.14 0 .25.11.25.25v7.5q-.02.23-.25.25h-5.5a.25.25 0 0 1-.25-.25z" clip-rule="evenodd"></path></svg>
+                    </div>
+                    <div>
+                        <div class="text-sm font-semibold text-foreground uppercase tracking-tight font-mono">Package Ready</div>
+                        <div class="text-xs text-(--ds-gray-600) font-mono">ZIP archive generated successfully</div>
+                    </div>
+                </div>
+                <a href="/download-file/${entry.sessionId}" class="text-xs font-mono font-medium text-foreground hover:underline px-2">
+                    RE-DOWNLOAD
+                </a>
+            `;
+            
+            const logArea = card.querySelector('.card-log');
             if (logArea) logArea.style.display = 'none';
+            card.appendChild(successDiv);
 
             finishAndProcessNext();
         }
 
         function onError(entry, message) {
-            const status = entry.card.querySelector('.card-status');
-            status.className = 'card-status error';
-            status.textContent = 'Error';
+            const card = entry.card;
+            const badge = card.querySelector('.status-badge');
+            badge.innerHTML = `<span class="status-badge-base bg-red-500/10 text-red-500">Error</span>`;
 
-            const logArea = entry.card.querySelector('.card-log');
-            if (logArea) {
-                const line = document.createElement('div');
-                line.className = 'log-entry';
-                line.style.color = '#f87171';
-                line.textContent = message;
-                logArea.appendChild(line);
-            }
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'mt-4 p-4 bg-red-500/5 border border-red-500/20 rounded-md text-xs font-mono text-red-500 leading-relaxed';
+            errorDiv.textContent = message;
+            
+            const logArea = card.querySelector('.card-log');
+            if (logArea) logArea.style.display = 'none';
+            card.appendChild(errorDiv);
 
             finishAndProcessNext();
         }
 
         function finishAndProcessNext() {
             processing = null;
-
             if (queue.length > 0) {
                 const next = queue.shift();
                 updateQueuePositions();
                 startProcessing(next);
             }
-
             updateQueueInfo();
         }
 
         function updateQueuePositions() {
             for (var i = 0; i < queue.length; i++) {
-                var posEl = queue[i].card.querySelector('.card-queue-pos');
-                if (posEl) posEl.textContent = 'Queue position: #' + (i + 1);
+                var posEl = queue[i].card.querySelector('.queue-pos-text');
+                if (posEl) posEl.textContent = 'Waiting at position #' + (i + 1) + '...';
             }
         }
 
         function updateQueueInfo() {
             const info = document.getElementById('queueInfo');
             if (processing && queue.length > 0) {
-                info.textContent = 'Processing 1 · ' + queue.length + ' in queue';
+                info.textContent = 'Active: 1 • Queue: ' + queue.length;
             } else if (processing) {
-                info.textContent = 'Processing 1 download...';
+                info.textContent = 'Active: 1 download';
             } else {
                 info.textContent = '';
             }
         }
 
-        function toggleLog(cardId) {
-            const card = document.getElementById(cardId);
-            const log = card.querySelector('.card-log');
-            if (log) {
-                log.style.display = log.style.display === 'none' ? '' : 'none';
-            }
+        function scrollToBottom() {
+            const area = document.getElementById('chatArea');
+            area.scrollTo({
+                top: area.scrollHeight,
+                behavior: 'smooth'
+            });
         }
 
         function formatUrl(url) {
             try {
                 var u = new URL(url);
                 var d = u.hostname + (u.pathname !== '/' ? u.pathname : '');
-                return d.length > 45 ? d.substring(0, 42) + '...' : d;
+                return d.length > 60 ? d.substring(0, 57) + '...' : d;
             } catch(e) { return url; }
         }
 
@@ -458,10 +486,6 @@
             d.textContent = text;
             return d.innerHTML;
         }
-
-        document.getElementById('urlInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') addUrl();
-        });
     </script>
 </body>
 </html>

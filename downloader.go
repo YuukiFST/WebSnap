@@ -42,6 +42,7 @@ type WebsiteDownloader struct {
 	logCallback        func(string)
 	httpClient         *cookiedHTTPClient
 	pendingReqs        map[network.RequestID]*pendingRequest
+	capReached         bool
 }
 
 type pendingRequest struct {
@@ -137,6 +138,7 @@ func (d *WebsiteDownloader) storeNetworkResource(url string, body []byte, conten
 		return true
 	}
 	if len(d.networkResources) >= maxTotalNetworkResources {
+		d.capReached = true
 		return false
 	}
 	d.networkResources[url] = &networkResource{body: body, contentType: contentType}
@@ -284,6 +286,10 @@ func (d *WebsiteDownloader) Process(allocCtx context.Context) error {
 
 	assetsCount := len(d.resourceCache)
 	d.log(fmt.Sprintf("> Done! %d assets saved", assetsCount))
+
+	if d.capReached {
+		d.log(fmt.Sprintf("> WARNING: site exceeded %d resources. Some assets may be missing — the replica may be incomplete.", maxTotalNetworkResources))
+	}
 
 	d.networkResourcesMu.Lock()
 	d.networkResources = nil
