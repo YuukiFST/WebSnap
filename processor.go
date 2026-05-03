@@ -243,6 +243,11 @@ func (d *WebsiteDownloader) rewriteModuleImports(scriptText string) string {
 
 		localPath := d.getResource(url, "")
 		if localPath != "" && localPath != url {
+			// ES modules require relative paths to start with ./ or ../
+			if !strings.HasPrefix(localPath, "./") && !strings.HasPrefix(localPath, "../") &&
+				!strings.HasPrefix(localPath, "/") && !strings.HasPrefix(localPath, "http") {
+				localPath = "./" + localPath
+			}
 			return strings.Replace(match, url, localPath, 1)
 		}
 		return match
