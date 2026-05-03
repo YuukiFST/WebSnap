@@ -132,3 +132,68 @@ func TestHeavyPageDoesNotCrash(t *testing.T) {
 	os.RemoveAll(workDir)
 	t.Log("Heavy page crash regression test passed")
 }
+
+func TestIntegrationLiquidGlass(t *testing.T) {
+	bm, err := NewBrowserManager()
+	if err != nil {
+		t.Skipf("Cannot start browser: %v", err)
+	}
+	defer bm.Shutdown()
+
+	if !bm.Healthy() {
+		t.Fatal("Browser not healthy")
+	}
+
+	tabCtx, tabCancel := bm.NewTab()
+	defer tabCancel()
+
+	workDir := "downloads/test_liquidglass"
+	os.RemoveAll(workDir)
+
+	d := NewWebsiteDownloader("https://liquid-glass.ybouane.com/", workDir, func(msg string) {
+		t.Log(msg)
+	})
+
+	processCtx, processCancel := context.WithTimeout(tabCtx, 120*time.Second)
+	defer processCancel()
+
+	if err := d.Process(processCtx); err != nil {
+		t.Fatalf("Process failed: %v", err)
+	}
+
+	htmlData, err := os.ReadFile(workDir + "/index.html")
+	if err != nil {
+		t.Fatal("index.html not found")
+	}
+	content := string(htmlData)
+
+	// Verify canvas exists (LiquidGlass injects canvas elements)
+	if !strings.Contains(content, "<canvas") {
+		t.Fatal("No <canvas> found in output — WebGL content may have been stripped")
+	}
+
+	// Verify scripts were preserved (not removed by old SPA stripping logic)
+	if !strings.Contains(content, "<script") {
+		t.Fatal("No scripts found in output")
+	}
+
+	// Verify assets directory has JS files (shaders/modules)
+	assetsDir := workDir + "/assets"
+	entries, err := os.ReadDir(assetsDir)
+	if err != nil {
+		t.Fatalf("assets dir not found: %v", err)
+	}
+
+	jsCount := 0
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".js") {
+			jsCount++
+		}
+	}
+	if jsCount == 0 {
+		t.Fatal("No JS assets captured — module scripts may be missing")
+	}
+
+	t.Logf("LiquidGlass test passed — canvas present, %d JS assets, %d total assets", jsCount, len(entries))
+	os.RemoveAll(workDir)
+}
