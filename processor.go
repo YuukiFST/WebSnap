@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
@@ -60,6 +61,7 @@ func (d *WebsiteDownloader) processHTML(htmlContent string) error {
 	d.processLottieAssets(doc)
 	d.fixNavigationLinks(doc)
 	d.handleWebflowOffline(doc, animCtx)
+	d.injectImportMap(doc)
 
 	htmlOutput, err := doc.Html()
 	if err != nil {
@@ -411,6 +413,39 @@ func (d *WebsiteDownloader) handleWebflowOffline(doc *goquery.Document, animCtx 
 	htmlElem.SetAttr("class", strings.Join(classSlice, " "))
 
 	d.log("> Injected w-mod-js and w-mod-ix classes")
+}
+
+func (d *WebsiteDownloader) injectImportMap(doc *goquery.Document) {
+	mappings := make(map[string]string)
+
+	d.resourceCacheMu.Lock()
+	for absURL, localPath := range d.resourceCache {
+		// Only map JS assets that look like CDN modules
+		if strings.HasSuffix(absURL, ".js") || strings.Contains(absURL, "/npm/") ||
+			strings.Contains(absURL, "jsdelivr") || strings.Contains(absURL, "unpkg") ||
+			strings.Contains(absURL, "skypack") || strings.Contains(absURL, "esm.sh") {
+			mappings[absURL] = localPath
+		}
+	}
+	d.resourceCacheMu.Unlock()
+
+	if len(mappings) == 0 {
+		return
+	}
+
+	importMap := map[string]interface{}{
+		"imports": mappings,
+	}
+	jsonData, err := json.MarshalIndent(importMap, "", "  ")
+	if err != nil {
+		return
+	}
+
+	head := doc.Find("head")
+	if head.Length() > 0 {
+		head.PrependHtml(fmt.Sprintf(`<script type="importmap" data-webcopy-importmap="true">\n%s\n</script>`, string(jsonData)))
+		d.log(fmt.Sprintf("> Injected import map with %d entries", len(mappings)))
+	}
 }
 
 func (d *WebsiteDownloader) processSrcset(srcset string) string {

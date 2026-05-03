@@ -62,3 +62,28 @@ func TestScriptsPreserved(t *testing.T) {
 		t.Fatal("script src was removed or not rewritten")
 	}
 }
+
+func TestImportMapInjection(t *testing.T) {
+	html := `<!DOCTYPE html><html><head></head><body></body></html>`
+	d := NewWebsiteDownloader("https://example.com", "test_output_importmap", func(string) {})
+	// Simulate captured resource
+	d.resourceCache["https://cdn.jsdelivr.net/npm/liquidglass/dist/index.js"] = "assets/liquidglass_index.js"
+	os.MkdirAll("test_output_importmap", 0755)
+	d.processHTML(html)
+
+	result, err := os.ReadFile("test_output_importmap/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(result)
+	if !strings.Contains(content, `<script type="importmap"`) {
+		t.Fatal("import map not injected")
+	}
+	if !strings.Contains(content, `"https://cdn.jsdelivr.net/npm/liquidglass/dist/index.js"`) {
+		t.Fatal("CDN URL not in import map")
+	}
+	if !strings.Contains(content, `"assets/liquidglass_index.js"`) {
+		t.Fatal("local path not in import map")
+	}
+	os.RemoveAll("test_output_importmap")
+}
