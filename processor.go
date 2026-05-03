@@ -421,9 +421,14 @@ func (d *WebsiteDownloader) injectImportMap(doc *goquery.Document) {
 	d.resourceCacheMu.Lock()
 	for absURL, localPath := range d.resourceCache {
 		// Only map JS assets that look like CDN modules
-		if strings.HasSuffix(absURL, ".js") || strings.Contains(absURL, "/npm/") ||
-			strings.Contains(absURL, "jsdelivr") || strings.Contains(absURL, "unpkg") ||
-			strings.Contains(absURL, "skypack") || strings.Contains(absURL, "esm.sh") {
+		absLower := strings.ToLower(absURL)
+		isCDN := strings.Contains(absLower, "/npm/") ||
+			strings.Contains(absLower, "jsdelivr") ||
+			strings.Contains(absLower, "unpkg") ||
+			strings.Contains(absLower, "skypack") ||
+			strings.Contains(absLower, "esm.sh")
+		isModule := strings.HasSuffix(absLower, ".js") || strings.HasSuffix(absLower, ".mjs")
+		if isCDN && isModule {
 			mappings[absURL] = localPath
 		}
 	}

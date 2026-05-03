@@ -64,14 +64,14 @@ func TestScriptsPreserved(t *testing.T) {
 }
 
 func TestImportMapInjection(t *testing.T) {
+	workDir := t.TempDir()
 	html := `<!DOCTYPE html><html><head></head><body></body></html>`
-	d := NewWebsiteDownloader("https://example.com", "test_output_importmap", func(string) {})
+	d := NewWebsiteDownloader("https://example.com", workDir, func(string) {})
 	// Simulate captured resource
 	d.resourceCache["https://cdn.jsdelivr.net/npm/liquidglass/dist/index.js"] = "assets/liquidglass_index.js"
-	os.MkdirAll("test_output_importmap", 0755)
 	d.processHTML(html)
 
-	result, err := os.ReadFile("test_output_importmap/index.html")
+	result, err := os.ReadFile(workDir + "/index.html")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,5 +85,22 @@ func TestImportMapInjection(t *testing.T) {
 	if !strings.Contains(content, `"assets/liquidglass_index.js"`) {
 		t.Fatal("local path not in import map")
 	}
-	os.RemoveAll("test_output_importmap")
+}
+
+func TestImportMapNoInjectionForNonCDN(t *testing.T) {
+	workDir := t.TempDir()
+	html := `<!DOCTYPE html><html><head></head><body></body></html>`
+	d := NewWebsiteDownloader("https://example.com", workDir, func(string) {})
+	// Simulate a same-origin script (should NOT be in import map)
+	d.resourceCache["https://example.com/app.js"] = "assets/app.js"
+	d.processHTML(html)
+
+	result, err := os.ReadFile(workDir + "/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(result)
+	if strings.Contains(content, `<script type="importmap"`) {
+		t.Fatal("import map should not be injected for non-CDN scripts")
+	}
 }
