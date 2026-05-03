@@ -277,6 +277,9 @@ func (d *WebsiteDownloader) Process(allocCtx context.Context) error {
 
 	d.fetchCSSTextFromBrowser(ctx, finalHTML)
 
+	dynamicURLs := d.collectDynamicURLs(ctx)
+	d.downloadMissingResources(dynamicURLs)
+
 	d.log("> Processing HTML and assets...")
 	if err := d.processHTML(finalHTML); err != nil {
 		return fmt.Errorf("process html: %w", err)
@@ -592,6 +595,150 @@ func (d *WebsiteDownloader) fetchCSSTextFromBrowser(ctx context.Context, htmlCon
 	}
 
 	d.log(fmt.Sprintf("> Fetched %d/%d stylesheets from browser", stored, len(cssContents)))
+}
+
+func (d *WebsiteDownloader) collectDynamicURLs(ctx context.Context) []string {
+	script := `(async () => {
+		const urls = new Set();
+
+		// Fonts
+		try {
+			for (const font of document.fonts) {
+				if (font.src) urls.add(font.src);
+			}
+		} catch(e) {}
+
+		// Stylesheet background images and font-face src
+		try {
+			for (const sheet of document.styleSheets) {
+				for (const rule of sheet.cssRules || []) {
+					if (rule.style) {
+						const bg = rule.style.backgroundImage;
+						if (bg && bg.includes('url(')) {
+							const m = bg.match(/url\(["']?([^"')]+)["']?\)/);
+							if (m) urls.add(m[1]);
+						}
+					}
+					if (rule.cssText && rule.cssText.includes('@font-face')) {
+						const m = rule.cssText.match(/src:\s*url\(["']?([^"')]+)["']?\)/g);
+						if (m) {
+							m.forEach(s => {
+								const u = s.match(/url\(["']?([^"')]+)["']?\)/);
+								if (u) urls.add(u[1]);
+							});
+						}
+					}
+				}
+			}
+		} catch(e) {}
+
+		// Dynamic imports
+		const origImport = window.__webcopy_origImport || (window.__webcopy_origImport = window.import);
+		if (origImport && !window.__webcopy_importPatched) {
+			window.import = function(specifier) {
+				if (typeof specifier === 'string') urls.add(specifier);
+				return origImport.apply(this, arguments);
+			};
+			window.__webcopy_importPatched = true;
+		}
+
+		// Workers
+		const OrigWorker = window.__webcopy_origWorker || (window.__webcopy_origWorker = window.Worker);
+		if (OrigWorker && !window.__webcopy_workerPatched) {
+			window.Worker = function(url, options) {
+				if (typeof url === 'string') urls.add(url);
+				return new OrigWorker(url, options);
+			};
+			window.__webcopy_workerPatched = true;
+		}
+
+		// Fetch
+		const origFetch = window.__webcopy_origFetch || (window.__webcopy_origFetch = window.fetch);
+		if (origFetch && !window.__webcopy_fetchPatched) {
+			window.fetch = function(input, init) {
+				const url = typeof input === 'string' ? input : input.url;
+				if (url) urls.add(url);
+				return origFetch.apply(this, arguments);
+			};
+			window.__webcopy_fetchPatched = true;
+		}
+
+		// XHR
+		const origOpen = XMLHttpRequest.prototype.open;
+		if (!window.__webcopy_xhrPatched) {
+			XMLHttpRequest.prototype.open = function(method, url) {
+				urls.add(url);
+				return origOpen.apply(this, arguments);
+			};
+			window.__webcopy_xhrPatched = true;
+		}
+
+		// Trigger any lazy-loaded fonts/styles by querying common selectors
+		document.querySelectorAll('link[rel="stylesheet"]').forEach(l => urls.add(l.href));
+		document.querySelectorAll('img[src], video[src], audio[src], source[src]').forEach(el => urls.add(el.src));
+
+		return Array.from(urls).filter(u => u && !u.startsWith('data:') && !u.startsWith('blob:'));
+	})()`
+
+	var result []string
+	err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+		res, _, err := runtime.Evaluate(script).WithAwaitPromise(true).WithReturnByValue(true).Do(ctx)
+		if err != nil {
+			return err
+		}
+		return json.Unmarshal(res.Value, &result)
+	}))
+	if err != nil {
+		d.log(fmt.Sprintf("> Dynamic URL collection error: %v", err))
+		return nil
+	}
+	d.log(fmt.Sprintf("> Collected %d dynamic URLs", len(result)))
+	return result
+}
+
+func (d *WebsiteDownloader) downloadMissingResources(urls []string) {
+	if len(urls) == 0 {
+		return
+	}
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 8)
+	downloaded := 0
+	var mu sync.Mutex
+
+	for _, u := range urls {
+		absURL := d.absolutize(u, "")
+		d.networkResourcesMu.RLock()
+		_, exists := d.networkResources[absURL]
+		d.networkResourcesMu.RUnlock()
+		if exists {
+			continue
+		}
+
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(url string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			if d.httpClient == nil {
+				return
+			}
+			body, ct, err := d.httpClient.get(url)
+			if err != nil || len(body) == 0 {
+				return
+			}
+			if d.storeNetworkResource(url, body, ct) {
+				mu.Lock()
+				downloaded++
+				mu.Unlock()
+			}
+		}(absURL)
+	}
+
+	wg.Wait()
+	if downloaded > 0 {
+		d.log(fmt.Sprintf("> Downloaded %d additional resources", downloaded))
+	}
 }
 
 func (d *WebsiteDownloader) waitAndRemovePreloader(ctx context.Context) {
