@@ -53,6 +53,7 @@ func (d *WebsiteDownloader) processHTML(htmlContent string) error {
 	d.processStylesheets(doc)
 	d.processInlineStyles(doc)
 	d.processScripts(doc)
+	d.processModuleScripts(doc)
 	d.processImages(doc)
 	d.processInlineStyleAttrs(doc)
 	d.processFavicons(doc)
@@ -204,6 +205,52 @@ func (d *WebsiteDownloader) processScripts(doc *goquery.Document) {
 			}
 		}
 	})
+}
+
+var moduleImportPattern = regexp.MustCompile(`import\s+(?:\{[^}]+\}|\*\s+as\s+\w+|\w+)?\s*from\s+['"]([^'"]+)['"]`)
+var moduleSideEffectImportPattern = regexp.MustCompile(`import\s+['"]([^'"]+)['"]`)
+
+func (d *WebsiteDownloader) processModuleScripts(doc *goquery.Document) {
+	d.log("> Processing module scripts...")
+	doc.Find("script[type='module']").Each(func(i int, s *goquery.Selection) {
+		scriptText := s.Text()
+		if scriptText == "" {
+			return
+		}
+
+		newText := d.rewriteModuleImports(scriptText)
+		if newText != scriptText {
+			if len(s.Nodes) > 0 && s.Nodes[0].FirstChild != nil {
+				s.Nodes[0].FirstChild.Data = newText
+			}
+		}
+	})
+}
+
+func (d *WebsiteDownloader) rewriteModuleImports(scriptText string) string {
+	rewriteImport := func(match string) string {
+		groups := moduleImportPattern.FindStringSubmatch(match)
+		if len(groups) < 2 {
+			groups = moduleSideEffectImportPattern.FindStringSubmatch(match)
+		}
+		if len(groups) < 2 {
+			return match
+		}
+		url := groups[1]
+		if url == "" || strings.HasPrefix(url, "data:") || strings.HasPrefix(url, "blob:") {
+			return match
+		}
+
+		localPath := d.getResource(url, "")
+		if localPath != "" && localPath != url {
+			return strings.Replace(match, url, localPath, 1)
+		}
+		return match
+	}
+
+	result := moduleImportPattern.ReplaceAllStringFunc(scriptText, rewriteImport)
+	result = moduleSideEffectImportPattern.ReplaceAllStringFunc(result, rewriteImport)
+	return result
 }
 
 func (d *WebsiteDownloader) processImages(doc *goquery.Document) {
