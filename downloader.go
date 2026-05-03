@@ -633,37 +633,6 @@ func (d *WebsiteDownloader) collectDynamicURLs(ctx context.Context) []string {
 			}
 		} catch(e) {}
 
-		// Workers
-		const origWorker = window.__webcopy_origWorker || (window.__webcopy_origWorker = window.Worker);
-		if (origWorker && !window.__webcopy_workerPatched) {
-			window.Worker = function(url, options) {
-				if (typeof url === 'string') urls.add(url);
-				return new origWorker(url, options);
-			};
-			window.__webcopy_workerPatched = true;
-		}
-
-		// Fetch
-		const origFetch = window.__webcopy_origFetch || (window.__webcopy_origFetch = window.fetch);
-		if (origFetch && !window.__webcopy_fetchPatched) {
-			window.fetch = function(input, init) {
-				const url = typeof input === 'string' ? input : input.url;
-				if (url) urls.add(url);
-				return origFetch.apply(this, arguments);
-			};
-			window.__webcopy_fetchPatched = true;
-		}
-
-		// XHR
-		if (!window.__webcopy_xhrPatched) {
-			const origOpen = XMLHttpRequest.prototype.open;
-			XMLHttpRequest.prototype.open = function(method, url) {
-				urls.add(url);
-				return origOpen.apply(this, arguments);
-			};
-			window.__webcopy_xhrPatched = true;
-		}
-
 		return Array.from(urls).filter(u => u && !u.startsWith('data:') && !u.startsWith('blob:'));
 	})()`
 
