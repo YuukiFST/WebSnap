@@ -62,3 +62,30 @@ func TestBrowserManagerMultipleTabs(t *testing.T) {
 		t.Fatal("Expected healthy after closing tab and opening new one")
 	}
 }
+
+func TestBrowserManagerWebGLEnabled(t *testing.T) {
+	bm, err := NewBrowserManager()
+	if err != nil {
+		t.Skipf("Cannot start browser: %v", err)
+	}
+	defer bm.Shutdown()
+
+	ctx, cancel := bm.NewTab()
+	defer cancel()
+
+	var webglSupported bool
+	err = chromedp.Run(ctx, chromedp.Evaluate(`
+		(() => {
+			try {
+				const canvas = document.createElement('canvas');
+				return !!(window.WebGLRenderingContext && canvas.getContext('webgl'));
+			} catch(e) { return false; }
+		})()
+	`, &webglSupported))
+	if err != nil {
+		t.Fatalf("failed to evaluate WebGL support: %v", err)
+	}
+	if !webglSupported {
+		t.Fatal("WebGL is not supported — rendering flags may still be disabled")
+	}
+}
