@@ -13,21 +13,11 @@ import (
 // animationContext holds detected animation framework information
 // so downstream functions know what NOT to destroy.
 type animationContext struct {
-	HasWebflow      bool
-	HasGSAP         bool
-	HasAOS          bool
-	HasScrollReveal bool
-	HasWOW          bool
-	HasLottie       bool
-	HasFramerMotion bool
-	HasAnimations   bool // true if any framework detected
+	HasWebflow bool
 }
 
 func (d *WebsiteDownloader) detectAnimationFrameworks(doc *goquery.Document) animationContext {
 	ctx := animationContext{}
-
-	htmlStr, _ := doc.Html()
-	htmlLower := strings.ToLower(htmlStr)
 
 	if doc.Find("[data-w-id]").Length() > 0 ||
 		doc.Find("[data-wf-page]").Length() > 0 ||
@@ -42,87 +32,8 @@ func (d *WebsiteDownloader) detectAnimationFrameworks(doc *goquery.Document) ani
 		}
 	})
 
-	doc.Find("script[src]").Each(func(i int, s *goquery.Selection) {
-		src, _ := s.Attr("src")
-		srcLower := strings.ToLower(src)
-		if strings.Contains(srcLower, "gsap") || strings.Contains(srcLower, "greensock") ||
-			strings.Contains(srcLower, "scrolltrigger") || strings.Contains(srcLower, "scrollsmoother") {
-			ctx.HasGSAP = true
-		}
-	})
-	doc.Find("script").Each(func(i int, s *goquery.Selection) {
-		text := s.Text()
-		if strings.Contains(text, "gsap.") || strings.Contains(text, "ScrollTrigger") ||
-			strings.Contains(text, "ScrollSmoother") {
-			ctx.HasGSAP = true
-		}
-	})
-	if doc.Find("[data-speed]").Length() > 0 || doc.Find("[data-lag]").Length() > 0 ||
-		doc.Find("#smooth-wrapper").Length() > 0 {
-		ctx.HasGSAP = true
-	}
-
-	if doc.Find("[data-aos]").Length() > 0 {
-		ctx.HasAOS = true
-	}
-
-	htmlClass := doc.Find("html").AttrOr("class", "")
-	if strings.Contains(htmlClass, "sr") {
-		ctx.HasScrollReveal = true
-	}
-	if doc.Find("[data-sr-id]").Length() > 0 {
-		ctx.HasScrollReveal = true
-	}
-
-	if doc.Find(".wow").Length() > 0 {
-		ctx.HasWOW = true
-	}
-	if strings.Contains(htmlLower, "new wow") {
-		ctx.HasWOW = true
-	}
-
-	if doc.Find("[data-animation-type='lottie']").Length() > 0 ||
-		doc.Find(".lottie").Length() > 0 ||
-		doc.Find(".bodymovin").Length() > 0 ||
-		doc.Find("[data-animation-path]").Length() > 0 ||
-		doc.Find("lottie-player").Length() > 0 ||
-		doc.Find("dotlottie-wc").Length() > 0 {
-		ctx.HasLottie = true
-	}
-
-	if doc.Find("[data-framer-component-type]").Length() > 0 ||
-		doc.Find("[data-framer-name]").Length() > 0 ||
-		doc.Find("[data-framer-appear-id]").Length() > 0 {
-		ctx.HasFramerMotion = true
-	}
-
-	ctx.HasAnimations = ctx.HasWebflow || ctx.HasGSAP || ctx.HasAOS ||
-		ctx.HasScrollReveal || ctx.HasWOW || ctx.HasLottie || ctx.HasFramerMotion
-
-	if ctx.HasAnimations {
-		var detected []string
-		if ctx.HasWebflow {
-			detected = append(detected, "Webflow IX2")
-		}
-		if ctx.HasGSAP {
-			detected = append(detected, "GSAP")
-		}
-		if ctx.HasAOS {
-			detected = append(detected, "AOS")
-		}
-		if ctx.HasScrollReveal {
-			detected = append(detected, "ScrollReveal")
-		}
-		if ctx.HasWOW {
-			detected = append(detected, "WOW.js")
-		}
-		if ctx.HasLottie {
-			detected = append(detected, "Lottie")
-		}
-		if ctx.HasFramerMotion {
-			detected = append(detected, "Framer Motion")
-		}
-		d.log(fmt.Sprintf("> Animation frameworks detected: %s", strings.Join(detected, ", ")))
+	if ctx.HasWebflow {
+		d.log("> Animation framework detected: Webflow IX2")
 	}
 
 	return ctx
@@ -168,8 +79,6 @@ func (d *WebsiteDownloader) removeWrapperIframes(doc *goquery.Document) {
 		}
 	})
 }
-
-
 
 func (d *WebsiteDownloader) ensureWebFontLinks(doc *goquery.Document) {
 	var families []string
@@ -502,41 +411,6 @@ func (d *WebsiteDownloader) handleWebflowOffline(doc *goquery.Document, animCtx 
 	htmlElem.SetAttr("class", strings.Join(classSlice, " "))
 
 	d.log("> Injected w-mod-js and w-mod-ix classes")
-}
-
-func (d *WebsiteDownloader) detectNextJS(doc *goquery.Document) bool {
-	found := false
-	doc.Find("script").Each(func(i int, s *goquery.Selection) {
-		scriptID, _ := s.Attr("id")
-		scriptText := s.Text()
-		if strings.Contains(scriptID, "__NEXT_DATA__") || strings.Contains(scriptText, "__NEXT_DATA__") {
-			found = true
-		}
-		if strings.Contains(scriptText, "self.__next") {
-			found = true
-		}
-	})
-	if found {
-		return true
-	}
-
-	doc.Find("script[src]").Each(func(i int, s *goquery.Selection) {
-		src, _ := s.Attr("src")
-		if strings.Contains(src, "_next/") {
-			found = true
-		}
-	})
-	if found {
-		return true
-	}
-
-	doc.Find("link").Each(func(i int, s *goquery.Selection) {
-		href, _ := s.Attr("href")
-		if strings.Contains(href, "_next/") {
-			found = true
-		}
-	})
-	return found
 }
 
 func (d *WebsiteDownloader) processSrcset(srcset string) string {

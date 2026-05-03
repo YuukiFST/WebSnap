@@ -48,13 +48,12 @@ func TestProcessCSSImportsStopsAtMaxDepth(t *testing.T) {
 }
 
 func TestScriptsPreserved(t *testing.T) {
+	workDir := t.TempDir()
 	html := `<!DOCTYPE html><html><head><script src="/_next/static/chunks/main.js"></script></head><body></body></html>`
-	os.RemoveAll("test_output")
-	os.MkdirAll("test_output", 0755)
-	d := NewWebsiteDownloader("https://example.com", "test_output", func(string) {})
+	d := NewWebsiteDownloader("https://example.com", workDir, func(string) {})
 	d.processHTML(html)
 
-	result, err := os.ReadFile("test_output/index.html")
+	result, err := os.ReadFile(workDir + "/index.html")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,5 +61,4 @@ func TestScriptsPreserved(t *testing.T) {
 	if !strings.Contains(content, `src="assets/`) && !strings.Contains(content, `src="/_next/`) {
 		t.Fatal("script src was removed or not rewritten")
 	}
-	os.RemoveAll("test_output")
 }
