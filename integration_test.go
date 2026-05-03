@@ -197,3 +197,43 @@ func TestIntegrationLiquidGlass(t *testing.T) {
 	t.Logf("LiquidGlass test passed — canvas present, %d JS assets, %d total assets", jsCount, len(entries))
 	os.RemoveAll(workDir)
 }
+
+func TestIntegrationSPAScriptsPreserved(t *testing.T) {
+	bm, err := NewBrowserManager()
+	if err != nil {
+		t.Skipf("Cannot start browser: %v", err)
+	}
+	defer bm.Shutdown()
+
+	tabCtx, tabCancel := bm.NewTab()
+	defer tabCancel()
+
+	workDir := "downloads/test_spa"
+	os.RemoveAll(workDir)
+
+	// Use a known Next.js or Gatsby site, or a simple site with script tags
+	d := NewWebsiteDownloader("https://example.com", workDir, func(msg string) {
+		t.Log(msg)
+	})
+
+	if err := d.Process(tabCtx); err != nil {
+		t.Fatalf("Process failed: %v", err)
+	}
+
+	htmlData, err := os.ReadFile(workDir + "/index.html")
+	if err != nil {
+		t.Fatal("index.html not found")
+	}
+	content := string(htmlData)
+
+	// Verify no script-stripping CSS was injected
+	if strings.Contains(content, "data-webcopy-anim-fallback") {
+		t.Fatal("animation fallback CSS found — JS-stripping logic not fully removed")
+	}
+	if strings.Contains(content, "data-webcopy-scroll-fix") {
+		t.Fatal("scroll fix CSS found — scroll-blocking logic not fully removed")
+	}
+
+	t.Log("SPA script preservation test passed")
+	os.RemoveAll(workDir)
+}
