@@ -5,7 +5,6 @@ import (
 	"net/url"
 	"os"
 	"regexp"
-	"sort"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -22,55 +21,6 @@ type animationContext struct {
 	HasLottie       bool
 	HasFramerMotion bool
 	HasAnimations   bool // true if any framework detected
-}
-
-type domTransformLib struct {
-	name           string
-	scriptPatterns []string
-	initPatterns   []string
-}
-
-var domTransformLibraries = []domTransformLib{
-	{
-		name:           "CircleType.js",
-		scriptPatterns: []string{"/circletype.js", "/circletype.min.js", "/circletype/"},
-		initPatterns:   []string{"new circletype(", "circletype(", ".radius("},
-	},
-	{
-		name:           "Splitting.js",
-		scriptPatterns: []string{"/splitting.js", "/splitting.min.js", "/splitting/dist/"},
-		initPatterns:   []string{"splitting(", "splitting.html("},
-	},
-	{
-		name:           "Typed.js",
-		scriptPatterns: []string{"/typed.min.js", "/typed.js"},
-		initPatterns:   []string{"new typed("},
-	},
-	{
-		name:           "Vivus.js",
-		scriptPatterns: []string{"/vivus.js", "/vivus.min.js", "/vivus/"},
-		initPatterns:   []string{"new vivus("},
-	},
-	{
-		name:           "CountUp.js",
-		scriptPatterns: []string{"/countup.js", "/countup.min.js", "/countup/"},
-		initPatterns:   []string{"new countup("},
-	},
-	{
-		name:           "Textillate.js",
-		scriptPatterns: []string{"/textillate.js", "/textillate.min.js"},
-		initPatterns:   []string{".textillate("},
-	},
-	{
-		name:           "Lettering.js",
-		scriptPatterns: []string{"/lettering.js", "/lettering.min.js", "/lettering/"},
-		initPatterns:   []string{".lettering("},
-	},
-	{
-		name:           "FitText.js",
-		scriptPatterns: []string{"/fittext.js", "/fittext.min.js"},
-		initPatterns:   []string{".fittext(", "fittext("},
-	},
 }
 
 func (d *WebsiteDownloader) detectAnimationFrameworks(doc *goquery.Document) animationContext {
@@ -186,9 +136,7 @@ func (d *WebsiteDownloader) processHTML(htmlContent string) error {
 
 	animCtx := d.detectAnimationFrameworks(doc)
 
-	d.fixScrollBlocking(doc, animCtx)
 	d.removeWrapperIframes(doc)
-	d.neutralizeDOMTransformScripts(doc)
 	d.ensureWebFontLinks(doc)
 	d.processStylesheets(doc)
 	d.processInlineStyles(doc)
@@ -200,9 +148,7 @@ func (d *WebsiteDownloader) processHTML(htmlContent string) error {
 	d.processBackgroundData(doc)
 	d.processLottieAssets(doc)
 	d.fixNavigationLinks(doc)
-	d.handleSPAFrameworks(doc, animCtx)
 	d.handleWebflowOffline(doc, animCtx)
-	d.injectAnimationFallbacks(doc, animCtx)
 
 	htmlOutput, err := doc.Html()
 	if err != nil {
@@ -211,73 +157,6 @@ func (d *WebsiteDownloader) processHTML(htmlContent string) error {
 
 	outputPath := d.outputDir + "/index.html"
 	return os.WriteFile(outputPath, []byte("<!DOCTYPE html>\n"+htmlOutput), 0644)
-}
-
-func (d *WebsiteDownloader) fixScrollBlocking(doc *goquery.Document, animCtx animationContext) {
-	d.log("> Fixing scroll issues for offline viewing...")
-
-	htmlElem := doc.Find("html")
-	if htmlElem.Length() > 0 {
-		classes := htmlElem.AttrOr("class", "")
-		if classes != "" {
-			newClasses := removeScrollBlockingClasses(classes, []string{
-				"lenis", "lenis-smooth", "lenis-scrolling", "lenis-stopped",
-				"has-scroll-smooth", "has-scroll-init", "locomotive-scroll",
-			})
-			htmlElem.SetAttr("class", newClasses)
-		}
-	}
-
-	body := doc.Find("body")
-	if body.Length() > 0 {
-		classes := body.AttrOr("class", "")
-		if classes != "" {
-			newClasses := removeScrollBlockingClasses(classes, []string{
-				"overflow-hidden", "no-scroll", "scroll-lock",
-				"lenis", "lenis-smooth", "has-scroll-smooth",
-			})
-			if !animCtx.HasAnimations {
-				newClasses = removeScrollBlockingClasses(newClasses, []string{"fixed"})
-			}
-			body.SetAttr("class", newClasses)
-		}
-	}
-
-	scrollFixCSS := `
-/* WebCopy: scroll fix */
-html, body {
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    scroll-behavior: auto !important;
-}
-html.lenis, html.lenis-smooth,
-body.lenis, body.lenis-smooth,
-.lenis-wrapper, .lenis-content,
-[data-lenis-prevent] {
-    overflow: visible !important;
-    height: auto !important;
-}`
-
-	head := doc.Find("head")
-	if head.Length() > 0 {
-		head.AppendHtml(fmt.Sprintf(`<style data-webcopy-scroll-fix="true">%s</style>`, scrollFixCSS))
-		d.log("> Injected CSS scroll fixes")
-	}
-}
-
-func removeScrollBlockingClasses(classes string, toRemove []string) string {
-	classSlice := strings.Fields(classes)
-	removeLower := make(map[string]bool)
-	for _, c := range toRemove {
-		removeLower[strings.ToLower(c)] = true
-	}
-	var filtered []string
-	for _, c := range classSlice {
-		if !removeLower[strings.ToLower(c)] {
-			filtered = append(filtered, c)
-		}
-	}
-	return strings.Join(filtered, " ")
 }
 
 func (d *WebsiteDownloader) removeWrapperIframes(doc *goquery.Document) {
@@ -290,50 +169,7 @@ func (d *WebsiteDownloader) removeWrapperIframes(doc *goquery.Document) {
 	})
 }
 
-func (d *WebsiteDownloader) neutralizeDOMTransformScripts(doc *goquery.Document) {
-	detectedLibs := make(map[string]bool)
 
-	doc.Find("script[src]").Each(func(i int, s *goquery.Selection) {
-		src, _ := s.Attr("src")
-		srcLower := strings.ToLower(src)
-		for _, lib := range domTransformLibraries {
-			for _, pattern := range lib.scriptPatterns {
-				if strings.Contains(srcLower, pattern) {
-					detectedLibs[lib.name] = true
-					s.Remove()
-					break
-				}
-			}
-		}
-	})
-
-	if len(detectedLibs) == 0 {
-		return
-	}
-
-	var detected []string
-	for name := range detectedLibs {
-		detected = append(detected, name)
-	}
-	sort.Strings(detected)
-	d.log(fmt.Sprintf("> DOM-transform libraries detected: %s — removing to prevent double-execution", strings.Join(detected, ", ")))
-
-	doc.Find("script:not([src])").Each(func(i int, s *goquery.Selection) {
-		text := s.Text()
-		textLower := strings.ToLower(text)
-		for _, lib := range domTransformLibraries {
-			if !detectedLibs[lib.name] {
-				continue
-			}
-			for _, pattern := range lib.initPatterns {
-				if strings.Contains(textLower, strings.ToLower(pattern)) {
-					s.Remove()
-					return
-				}
-			}
-		}
-	})
-}
 
 func (d *WebsiteDownloader) ensureWebFontLinks(doc *goquery.Document) {
 	var families []string
@@ -636,124 +472,6 @@ func (d *WebsiteDownloader) fixNavigationLinks(doc *goquery.Document) {
 	})
 }
 
-func (d *WebsiteDownloader) handleSPAFrameworks(doc *goquery.Document, animCtx animationContext) {
-	isGatsby := doc.Find("#___gatsby").Length() > 0
-	isNextJS := doc.Find("#__next").Length() > 0 || d.detectNextJS(doc)
-	isNuxt := doc.Find("#__nuxt").Length() > 0
-
-	if !isGatsby && !isNextJS && !isNuxt {
-		return
-	}
-
-	framework := "Gatsby"
-	if isNextJS {
-		framework = "Next.js"
-	} else if isNuxt {
-		framework = "Nuxt"
-	}
-	d.log(fmt.Sprintf("> Detected %s - removing framework scripts...", framework))
-
-	safeKeywords := []string{"google", "analytics", "gtm", "gtag", "facebook", "pixel",
-		"elfsight", "hubspot", "intercom", "crisp", "drift", "hotjar",
-		"clarity", "segment", "mixpanel", "amplitude", "adobe", "privacy"}
-
-	if animCtx.HasWebflow {
-		safeKeywords = append(safeKeywords, "webflow")
-	}
-	if animCtx.HasGSAP {
-		safeKeywords = append(safeKeywords, "gsap", "greensock", "scrolltrigger", "scrollsmoother")
-	}
-	if animCtx.HasAOS {
-		safeKeywords = append(safeKeywords, "aos")
-	}
-	if animCtx.HasLottie {
-		safeKeywords = append(safeKeywords, "lottie", "bodymovin")
-	}
-	if animCtx.HasWOW {
-		safeKeywords = append(safeKeywords, "wow")
-	}
-	if animCtx.HasScrollReveal {
-		safeKeywords = append(safeKeywords, "scrollreveal")
-	}
-	safeKeywords = append(safeKeywords, "jquery")
-
-	scriptsRemoved := 0
-	doc.Find("script").Each(func(i int, s *goquery.Selection) {
-		src, _ := s.Attr("src")
-		scriptText := s.Text()
-
-		isSafe := false
-		srcLower := strings.ToLower(src)
-		for _, kw := range safeKeywords {
-			if strings.Contains(srcLower, kw) {
-				isSafe = true
-				break
-			}
-		}
-
-		if isSafe {
-			return
-		}
-
-		shouldRemove := false
-
-		if isGatsby && (strings.Contains(src, "framework-") ||
-			strings.Contains(src, "app-") || strings.Contains(src, "commons-") ||
-			strings.Contains(src, "component-") || strings.Contains(src, "webpack-runtime") ||
-			strings.Contains(src, "polyfill")) {
-			shouldRemove = true
-		}
-
-		if isNextJS {
-			if src != "" && !strings.HasPrefix(src, "http://") &&
-				!strings.HasPrefix(src, "https://") && !strings.HasPrefix(src, "//") {
-				shouldRemove = true
-			}
-			if strings.Contains(src, "_next/") ||
-				strings.Contains(srcLower, "polyfill") {
-				shouldRemove = true
-			}
-			if strings.Contains(scriptText, "__next") || strings.Contains(scriptText, "self.__next") {
-				shouldRemove = true
-			}
-			if strings.Contains(src, "-") && strings.HasSuffix(src, ".js") && strings.Contains(src, "assets/") {
-				shouldRemove = true
-			}
-		}
-
-		if isNuxt && (strings.Contains(src, "_nuxt/") || strings.Contains(scriptText, "__NUXT__") ||
-			strings.Contains(srcLower, "nuxt")) {
-			shouldRemove = true
-		}
-
-		if strings.Contains(scriptText, "GATSBY") || strings.Contains(scriptText, "pageData") ||
-			strings.Contains(scriptText, "self.__next") || strings.Contains(scriptText, "__NEXT_DATA__") {
-			shouldRemove = true
-		}
-
-		if shouldRemove {
-			s.Remove()
-			scriptsRemoved++
-		}
-	})
-
-	linksRemoved := 0
-	doc.Find("link[rel]").Each(func(i int, s *goquery.Selection) {
-		rel, _ := s.Attr("rel")
-		relLower := strings.ToLower(rel)
-		if strings.Contains(relLower, "preload") || strings.Contains(relLower, "prefetch") ||
-			strings.Contains(relLower, "modulepreload") {
-			href, _ := s.Attr("href")
-			if strings.Contains(href, "_next/") || (strings.HasPrefix(href, "assets/") && strings.Contains(href, "-")) {
-				s.Remove()
-				linksRemoved++
-			}
-		}
-	})
-
-	d.log(fmt.Sprintf("> Removed %d scripts and %d preloads", scriptsRemoved, linksRemoved))
-}
-
 func (d *WebsiteDownloader) handleWebflowOffline(doc *goquery.Document, animCtx animationContext) {
 	if !animCtx.HasWebflow {
 		return
@@ -783,120 +501,7 @@ func (d *WebsiteDownloader) handleWebflowOffline(doc *goquery.Document, animCtx 
 	}
 	htmlElem.SetAttr("class", strings.Join(classSlice, " "))
 
-	webflowFallbackCSS := `
-/* WebCopy: Webflow offline fallback */
-[data-w-id] {
-    opacity: 1 !important;
-    visibility: visible !important;
-}`
-
-	head := doc.Find("head")
-	if head.Length() > 0 {
-		head.AppendHtml(fmt.Sprintf(`<style data-webcopy-webflow-fix="true">%s</style>`, webflowFallbackCSS))
-	}
-
-	doc.Find("[data-w-id]").Each(func(i int, s *goquery.Selection) {
-		style, exists := s.Attr("style")
-		if !exists {
-			return
-		}
-		cleaned := d.cleanWebflowInlineStyle(style)
-		if cleaned != style {
-			if cleaned == "" {
-				s.RemoveAttr("style")
-			} else {
-				s.SetAttr("style", cleaned)
-			}
-		}
-	})
-
-	body := doc.Find("body")
-	if body.Length() > 0 {
-		bodyStyle := body.AttrOr("style", "")
-		if strings.Contains(bodyStyle, "opacity") {
-			cleaned := d.cleanWebflowInlineStyle(bodyStyle)
-			if cleaned != bodyStyle {
-				if cleaned == "" {
-					body.RemoveAttr("style")
-				} else {
-					body.SetAttr("style", cleaned)
-				}
-			}
-		}
-	}
-
-	d.log("> Guaranteed w-mod-ix + CSS fallbacks")
-}
-
-var webflowStyleCleanRe = regexp.MustCompile(`\s*(?:opacity|display)\s*:\s*[\d.]+\s*;?`)
-var webflowTransformRe = regexp.MustCompile(`\s*transform\s*:\s*translate3d\([^)]+\)\s*;?`)
-
-func (d *WebsiteDownloader) cleanWebflowInlineStyle(style string) string {
-	hasOpacity0 := strings.Contains(style, "opacity:0")
-
-	cleaned := webflowStyleCleanRe.ReplaceAllString(style, "")
-
-	if hasOpacity0 {
-		cleaned = webflowTransformRe.ReplaceAllString(cleaned, "")
-	}
-
-	cleaned = strings.TrimSpace(cleaned)
-	cleaned = strings.TrimRight(cleaned, ";")
-	cleaned = strings.TrimSpace(cleaned)
-
-	if hasOpacity0 && !strings.Contains(cleaned, "transform:") {
-		if cleaned != "" {
-			cleaned += "; transform: none"
-		} else {
-			cleaned = "transform: none"
-		}
-	}
-
-	return cleaned
-}
-
-func (d *WebsiteDownloader) injectAnimationFallbacks(doc *goquery.Document, animCtx animationContext) {
-	if !animCtx.HasAnimations {
-		return
-	}
-
-	var cssBlocks []string
-
-	if animCtx.HasAOS {
-		cssBlocks = append(cssBlocks, `
-/* AOS fallback */
-body:not(.aos-init) [data-aos] {
-    opacity: 1 !important;
-    transform: none !important;
-    transition: none !important;
-}`)
-	}
-
-	if animCtx.HasScrollReveal {
-		cssBlocks = append(cssBlocks, `
-/* ScrollReveal fallback */
-html.sr [data-sr-id] {
-    visibility: visible !important;
-}`)
-	}
-
-	if animCtx.HasWOW {
-		cssBlocks = append(cssBlocks, `
-/* WOW.js fallback */
-.wow {
-    visibility: visible !important;
-    animation-name: none !important;
-}`)
-	}
-
-	if len(cssBlocks) > 0 {
-		fallbackCSS := strings.Join(cssBlocks, "\n")
-		head := doc.Find("head")
-		if head.Length() > 0 {
-			head.AppendHtml(fmt.Sprintf(`<style data-webcopy-anim-fallback="true">%s</style>`, fallbackCSS))
-		}
-		d.log("> Injected animation fallbacks")
-	}
+	d.log("> Injected w-mod-js and w-mod-ix classes")
 }
 
 func (d *WebsiteDownloader) detectNextJS(doc *goquery.Document) bool {
