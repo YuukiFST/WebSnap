@@ -2,5 +2,11 @@ docs/superpowers/
 mcpmarket.com/
 webcopy.exe
 webcopy_test.exe
+webcopy.test.exe
+*_test.go
 *.exe~
+temp_repo/
+glass_fixed/
+glass_fixed.zip
+glass.html
 .worktrees/
